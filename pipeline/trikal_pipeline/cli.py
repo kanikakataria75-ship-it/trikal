@@ -174,6 +174,20 @@ def build_index(index_code: str = typer.Argument("NIFTY500")) -> None:
     typer.echo(index_history.rebuild(con, raw, index_code.upper()))
 
 
+@app.command("coverage")
+def coverage(out: str = typer.Option("docs/reports/coverage.md", help="Markdown output path")) -> None:
+    """Write the data coverage & quality report."""
+    from pathlib import Path
+
+    from trikal_core.db import connect
+    from trikal_pipeline.coverage import report
+
+    text = report(connect(read_only=True))
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
+    Path(out).write_text(text, encoding="utf-8")
+    typer.echo(f"wrote {out}")
+
+
 @app.command("raw-status")
 def raw_status() -> None:
     """Summarise the raw zone fetch log."""

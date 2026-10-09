@@ -100,3 +100,23 @@ Rating actions arrive two ways: (a) agency press releases (CRISIL, ICRA, CARE, I
 | PIT sector classification & index history | Must be reconstructed before 2022 | NSE Indices data licence, Prowess, vendors above |
 | Redistribution rights (if TRIKAL ever goes public) | Not available | NSE Data & Analytics, BSE data licence |
 | Commodity prices | Monthly proxies only | Exchange/vendor feeds |
+
+---
+
+## 9. Findings during M1 ingestion (2026-10-09/10)
+
+| Source | Finding | Consequence |
+|---|---|---|
+| `nse.bhav.legacy` | ISIN + TOTALTRADES columns appear from **Aug-2011**; files exist back to **Nov-1994** (e.g. 02-Jan-1995). | Pre-Aug-2011 rows get identity through code continuity / symbol chains (FORMULAS.md §Security identity). |
+| `nse.bhav.legacy` | **PREVCLOSE is not adjusted** for corporate actions (TCS bonus 1:1, ex 31-May-2018: PREVCLOSE 3514.10, CLOSE 1741.05). | Adjustments come from announcements confirmed by the observed price move (ADR-012 revised). |
+| `nse.bhav.udiff` | First UDiFF file: **08-Jul-2024**; legacy files still exist up to 05-Jul-2024. | Cut-over fixed in `sources/bhav.py`. |
+| NSE archives | Days without a session answer **HTTP 404**. | Clean `no_session` signal for the calendar. |
+| `bse.bhav.*` | Days without a file answer **HTTP 200 with an HTML placeholder** (14,287 B). Formats: legacy `EQDDMMYY_CSV.ZIP` from ~2007, `EQ_ISINCODE_DDMMYY.zip` (with ISIN) ~2017–2024, UDiFF from 2024. | Payloads validated by content. A BSE placeholder on an NSE session day is treated as **unknown**, not a holiday. |
+| `bse.bhav.*` | **Source files have holes**: e.g. BSE 15-Jul-2022 file (3,019 rows) omits TCS (532540), which traded that day. | Price-signal comparisons require adjacent sessions; such gaps never create adjustment factors. |
+| `nse.corp_actions` | Date-range endpoint returns all companies for a month (382 monthly calls for 1995–2026, 43,794 records). `caBroadcastDate` is null in old records. | `known_at` imputed as ex-date 09:00 IST (conservative). Old subjects quote dividends as % of face value. |
+| `nse.symbol_change` | No header row; columns: company, old, new, date. 1,065 records. | Parsed positionally. |
+| `nse.delisted` | Two-digit years (`15-Apr-02`), no ISIN; 328 records (from 2002). | Delisting dates split trading episodes. |
+| `niftyindices.media` | All **1,513 press releases (Sep-1998 →)** are listed in the static HTML of `/media`; PDFs at `/Press_Release/ind_prsDDMMYYYY[_n].pdf`. 848 relevant PDFs fetched, 5 failed (logged). | Basis of the membership reconstruction (ADR-013). |
+| `niftyindices` snapshots | Official constituent files can contain **placeholder rows** during corporate actions (e.g. `DUMMYHEG`, "Dummy HEG Ltd.", ISIN `DUM545A01024`, Oct-2026), and **REIT units** (Nifty 500 includes REITs from 30-Sep-2026). | Placeholders excluded and logged; REIT constituents identified by symbol → ISIN. |
+| Press releases | Changes can be **voided, deferred or revoked** in later free-text releases (27-Mar-2020 rebalance voided on 13-May-2020; Vodafone Idea exclusion revoked 25-Sep-2024, Prism Johnson excluded instead). | Curated, cited overrides in `config/index_overrides.yaml`. |
+| Press releases | Before ~2011 lists give company names only, often followed by the industry ("Munjal Showa Ltd. Auto Ancillaries"); pre-2010 PDFs are web-page printouts with navigation text mixed in. | Name matching with confidence; navigation text stripped. |

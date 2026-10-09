@@ -93,7 +93,7 @@ _ROW = re.compile(r"^\s*(\d{1,3})[\.\)]?\s+(\S.*?)\s*$")
 # "on account of" ("excluded on account of inclusion in Nifty 500") is a reason, not the list's index.
 _INLINE_INDEX = re.compile(r"(?<!account of )(?:excluded from|included in)\s+(?:the\s+)?"
                            r"((?:s&p\s+)?(?:cnx|nifty|crisil)\s*[\w&\-]*(?:\s+[\w&\-]+){0,3}?)\s*(?:index)?"
-                           r"(?:\s+w\.?e\.?f|\s+as\b|\s*:|\s*$|\s+on\b|\s+from\b)", re.I)
+                           r"(?:\s+w\.?e\.?f|\s+with\s+effect|\s+as\b|\s+are\b|\s+is\b|\s*:|\s*$|\s+on\b|\s+from\b)", re.I)
 # A list-opening sentence. Company names containing "Inclusion" (Bharat Financial Inclusion) must not match.
 _ACTION = re.compile(r"\b(?:being|are|is|be)\s+(excluded|included)\b|^(exclusions?|inclusions?)\s*:?\s*$", re.I)
 

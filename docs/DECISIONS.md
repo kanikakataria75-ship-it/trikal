@@ -52,5 +52,11 @@ All ADRs below are **proposed** at M0 and become accepted when the owner signs o
 ### ADR-011 · 2026-10-09 · proposed: Security identity = ISIN stem
 **Decision:** `security_id = 'S:' + ISIN[:9]` (issuer + security type), so face-value changes (new ISIN serial) stay one security. Pre-ISIN rows inherit identity through same-code trading episodes or NSE symbol-change chains; otherwise a flagged synthetic id. Each listing row carries method + confidence.
 
-### ADR-012 · 2026-10-09 · proposed: Adjustment factors from the exchange's own base price
-**Decision:** On an ex-date the bhavcopy PREVCLOSE is the exchange-adjusted close, so factor = PREVCLOSE(t) / CLOSE(t-1). This is cross-checked against parsed announcements (match/mismatch/implied_only/parsed_only), and every disagreement is logged in `dq_issue`. Adjusted-as-of-D uses only events with ex_date <= D (this replaces the announcement-time rule in ARCHITECTURE §4.3).
+### ADR-012 · 2026-10-09, revised 2026-10-10 · proposed: Adjustment factors: announcements confirmed by prices
+**Context:** The first version assumed the bhavcopy PREVCLOSE carries the exchange's adjustment. The data disproved it: legacy NSE files do not adjust PREVCLOSE (TCS bonus, 31-May-2018). Gaps in partially downloaded data and holes in source files (BSE 15-Jul-2022 omits TCS) also produced spurious factors.
+**Decision:** Announced actions (NSE feed + subject parser) are the primary source. Each is confirmed against the observed close/previous-close move. The exchange-implied factor is used only where present and only across adjacent sessions on the true calendar (`exchange_day`, unknown days are never holidays). Contradicted announcements and gap-contaminated factors are logged and **not applied**; unexplained jumps are logged with a suggested factor. Adjusted-as-of-D uses only events with ex_date <= D. Full rules: FORMULAS.md.
+
+### ADR-013 · 2026-10-10 · proposed: Index membership reconstructed from press releases + cited overrides
+**Context:** No official membership history exists (RISKS R-4).
+**Decision:** Rebuild backwards from the official constituent file using every NSE Indices press release, with a fixed-size count check at every effective date. Free-text cancellations and revocations (e.g. the voided 27-Mar-2020 rebalance, the 2024 Vodafone Idea revocation) are handled by a human-reviewed `config/index_overrides.yaml`, where each entry cites its source release. Unresolvable names stay in the walk as zero-confidence placeholders, never dropped.
+**Consequences:** Accuracy is measurable (share of dates passing the count check), and every membership row traces to a PDF.
