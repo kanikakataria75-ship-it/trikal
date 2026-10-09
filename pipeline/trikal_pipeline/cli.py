@@ -161,6 +161,19 @@ def show(
         typer.echo(f"  {b.trade_date}  close={b.close:.2f}  factor={b.factor:.6f}  vol={b.volume:.0f}")
 
 
+@app.command("build-index")
+def build_index(index_code: str = typer.Argument("NIFTY500")) -> None:
+    """Reconstruct point-in-time membership of an index from NSE Indices press releases."""
+    from trikal_core.db import connect, init_schema
+    from trikal_pipeline import index_history
+    from trikal_pipeline.sources import nifty
+
+    con, raw = connect(), RawStore()
+    init_schema(con)
+    nifty.load_press_index(con, raw)
+    typer.echo(index_history.rebuild(con, raw, index_code.upper()))
+
+
 @app.command("raw-status")
 def raw_status() -> None:
     """Summarise the raw zone fetch log."""

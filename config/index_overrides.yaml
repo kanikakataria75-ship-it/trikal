@@ -1,0 +1,42 @@
+# Curated corrections to index-change parsing. Every entry must cite the NSE Indices release that
+# justifies it. The parser never guesses these; they are human-reviewed facts with lineage.
+
+void_releases:
+  # Announced for 27-Mar-2020, deferred (23/25-Mar-2020), then declared null and void on 13-May-2020
+  # for all indices except NIFTY 50 and NIFTY Bank.
+  - release: ind_prs18022020.pdf
+    except_indices: [NIFTY50, NIFTYBANK]
+    source: ind_prs13052020.pdf
+    reason: "Replacements effective 27-Mar-2020 'shall stand null and void'"
+  - release: ind_prs12032020.pdf
+    except_indices: [NIFTY50, NIFTYBANK]
+    source: ind_prs13052020.pdf
+    reason: "Replacements effective 27-Mar-2020 'shall stand null and void'"
+  - release: ind_prs19032020.pdf
+    except_indices: [NIFTY50, NIFTYBANK]
+    source: ind_prs13052020.pdf
+    reason: "Replacements effective 27-Mar-2020 'shall stand null and void'"
+  - release: ind_prs23032020.pdf
+    except_indices: [NIFTY50, NIFTYBANK]
+    source: ind_prs25032020.pdf
+    reason: "Impact-cost replacement for 27-Mar-2020 deferred 'until further notice', then voided 13-May-2020"
+
+# Individual announced changes later revoked (the release that revokes them is the source).
+void_events:
+  - release: ind_prs23082024.pdf
+    index: NIFTY500
+    action: out
+    symbol: IDEA
+    source: ind_prs25092024.pdf
+    reason: "Revocation of exclusion of Vodafone Idea Ltd. following recalculation of impact cost"
+
+# Changes stated in a form the parser does not read (e.g. tables of 'Exclusion revoked' remarks).
+add_events:
+  - index: NIFTY500
+    effective_date: 2024-09-30
+    announced_date: 2024-09-25
+    action: out
+    symbol: PRSMJOHNSN
+    company: Prism Johnson Ltd.
+    source: ind_prs25092024.pdf
+    reason: "Excluded in place of Vodafone Idea Ltd. after the revocation"
