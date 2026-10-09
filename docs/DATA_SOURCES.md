@@ -1,0 +1,102 @@
+# TRIKAL — Data Sources Registry (M0)
+
+**Verification run:** 2026-10-09, from the owner's machine (Windows 11, residential Indian IP assumed), plain HTTPS with a browser User-Agent, no cookies, no login. "Verified" means *the endpoint answered with the expected content on that date*. It says nothing about legal clearance (see the **Terms** column and RISKS R-1). Any endpoint can change without notice, so M1 builds a daily `source_health` check.
+
+Legend: ✅ verified working · ⚠️ works with caveats · ❌ failed / blocked · 🔎 not yet probed (planned for the milestone shown)
+
+Machine-readable twin: `/config/sources.yaml` (created in M1, mirrors this table: key, url pattern, cadence, format, terms, licence status, owner of record).
+
+---
+
+## 1. Exchange data — prices & security master (M1)
+
+| Key | Source / URL pattern | Status | What we saw | Notes |
+|---|---|---|---|---|
+| `nse.bhav.udiff` | `nsearchives.nseindia.com/content/cm/BhavCopy_NSE_CM_0_0_0_{YYYYMMDD}_F_0000.csv.zip` | ✅ | 2025-10-08 file, 180 KB zip. Columns: `TradDt, BizDt, Sgmt, Src, FinInstrmTp, FinInstrmId, ISIN, TckrSymb, SctySrs, …, OpnPric, HghPric, LwPric, ClsPric, LastPric, PrvsClsgPric, …, TtlTradgVol, TtlTrfVal, TtlNbOfTxsExctd …` | Current (UDiFF) format, **has ISIN**. The exact cutover date from the legacy format is pinned in M1 by probing the boundary. |
+| `nse.bhav.legacy` | `nsearchives.nseindia.com/content/historical/EQUITIES/{YYYY}/{MON}/cm{DD}{MON}{YYYY}bhav.csv.zip` | ✅ | 2010-01-04 file. Columns: `SYMBOL, SERIES, OPEN, HIGH, LOW, CLOSE, LAST, PREVCLOSE, TOTTRDQTY, TOTTRDVAL, TIMESTAMP` | **No ISIN in early files.** Needs symbol-history join (ARCHITECTURE §4.4). Earliest available year to be probed in M1 (NSE equity trading began Nov 1994). |
+| `nse.delivery` | MTO / `sec_bhavdata_full` files | 🔎 M1 | — | Delivery % for Flows desk. |
+| `bse.bhav.udiff` | `bseindia.com/download/BhavCopy/Equity/BhavCopy_BSE_CM_0_0_0_{YYYYMMDD}_F_0000.CSV` | ✅ | 2025-10-08, 815 KB, same UDiFF schema, `FinInstrmId` = BSE scrip code, has ISIN | Covers BSE-only listings (a large share of the 5,000+ universe is BSE-only). Legacy BSE bhav format for older years: 🔎 M1. |
+| `nse.equity_list` | `nsearchives.nseindia.com/content/equities/EQUITY_L.csv` | ✅ | `SYMBOL, NAME OF COMPANY, SERIES, DATE OF LISTING, PAID UP VALUE, MARKET LOT, ISIN NUMBER, FACE VALUE` | Current snapshot only. Not PIT. Daily snapshots from M1 onward give forward PIT. |
+| `nse.delisted` | `nsearchives.nseindia.com/content/equities/delisted.csv` | ✅ | `Symbol, Company, Delisted Date, Type of Delisting` (from 2002) | **No ISIN.** Join via symbol history. |
+| `nse.symbol_change` | `…/content/equities/symbolchange.csv` | 🔎 M1 | — | Critical for the pre-ISIN join. |
+| `nse.name_change` | `…/content/equities/namechange.csv` | 🔎 M1 | — | |
+| `bse.scrip_master` | `api.bseindia.com/BseIndiaAPI/api/ListofScripData/…` (incl. `status=Delisted`) | ❌ | HTTP 403 with and without Referer | BSE's JSON API blocks non-browser clients. Alternatives for M1: BSE downloadable scrip lists, or ISINs harvested from historical BSE bhavcopies (has ISIN in UDiFF era). |
+| `nse.indices.close` | `nsearchives.nseindia.com/content/indices/ind_close_all_{DDMMYYYY}.csv` | ✅ | All NSE indices daily OHLC + **P/E, P/B, Div Yield** | Index-level valuation history for sector bands. |
+
+## 2. Index & sector membership (M1/M2) — the hardest PIT gap
+
+| Key | Source | Status | Notes |
+|---|---|---|---|
+| `niftyindices.constituents` | `niftyindices.com/IndexConstituent/ind_nifty500list.csv` (and per-index files) | ✅ | **Current snapshot only** (`Company Name, Industry, Symbol, Series, ISIN Code`). |
+| `niftyindices.press_releases` | `niftyindices.com/Press_Release/ind_prs{DDMMYYYY}.pdf` | ✅ (individual PDFs exist back to at least 2008) | **No consolidated history file exists.** Membership history must be *reconstructed* by parsing every reconstitution press release (inclusions/exclusions + effective date) backwards from today's snapshot. Each reconstructed interval stores `method='reconstructed'`, `confidence`, and the PDF as lineage. Ad-hoc replacements (e.g. corporate events, Yes Bank removal on 19-Mar-2020) arrive via separate circulars and are included. |
+| `nse.iic` | NSE/BSE common **India Industry Classification** (Macro-Economic Sector / Sector / Industry / Basic Industry). Introduced 31-Mar-2022, revised 2023. | ⚠️ | **Official history only from 2022.** Before that, NSE used an older single-level "Industry" field. Classification before 2022 is *reconstructed* (mapped from the old industry field and the company's then-revenue mix) and flagged `confidence < 1`. This is exactly the gap that broke the owner's earlier study, so it is surfaced explicitly in every backtest report (RISKS R-3). Option: licensed vendor PIT classification **[Q1]**. |
+| BSE index constituents | asiaindex / BSE | 🔎 M1 | Lower priority than Nifty family. |
+
+## 3. Corporate filings & fundamentals (M2)
+
+| Key | Source | Status | What we saw | Notes |
+|---|---|---|---|---|
+| `nse.results` | `www.nseindia.com/api/corporates-financial-results?index=equities&period=Quarterly&symbol=…` | ✅ | TCS: 162 filings, oldest period 31-Mar-2005. Fields include `broadCastDate`, `filingDate`, `fromDate`, `toDate`, `consolidated`, `audited`, `indAs`, `reInd`, `xbrl` (direct XML URL), `resultDetailedDataLink` | Gives us `known_at` (`broadCastDate`) **with seconds**. ⚠️ the oldest rows have **no broadcast date** → `known_at` must be imputed for them (ARCHITECTURE §2). JSON API, not a published download; see Terms. |
+| `nse.xbrl` | `nsearchives.nseindia.com/corporate/xbrl/INDAS_…xml` | ✅ (URL obtained, per-file fetch 🔎 M2) | | Primary fundamentals path (ladder step 1). |
+| `nse.shareholding` | `www.nseindia.com/api/corporate-share-holdings-master?index=equities&symbol=…` | ⚠️ | TCS: 20 quarters, **oldest 30-Sep-2021**. Fields include `broadcastDate`, `submissionDate`, `revisedData/revisedDate` (revisions!), `xbrl` | Only ~5 years via this endpoint. Older shareholding: BSE shareholding pages / XBRL archive 🔎 M2. Revision fields map cleanly onto our restatement model. |
+| `nse.pledge` | `www.nseindia.com/api/corporate-pledgedata?index=equities&symbol=…` | ✅ | 670 B response for ADANIENT | Structure 🔎 M2. |
+| `nse.insider` | `www.nseindia.com/api/corporates-pit?index=equities&symbol=…` | ✅ | 16.5 KB for TCS | SEBI PIT Regulations disclosures. |
+| `nse.corp_actions` | `www.nseindia.com/api/corporates-corporateActions?index=equities&symbol=…` | ✅ | Fields include `exDate`, `faceVal`, `isin`, purpose text | Purpose text needs parsing ("Bonus 1:1", "Face Value Split From Rs 10 To Rs 2"); golden-file tests. The announcement time (`known_at`) of a corporate action is **not** the ex-date, so it is taken from the board-meeting/announcement record. |
+| `nse.announcements` | `www.nseindia.com/api/corporate-announcements?index=equities` | ✅ | Fields: `an_dt`, `sort_date`, `exchdisstime`, `attchmntFile`, `desc`, `sm_isin`, `hasXbrl` | Firehose for events, rating actions (Reg 30), concall transcripts (Reg 46(2)(oa)), investor presentations. |
+| `nse.board_meetings` | `www.nseindia.com/api/corporate-board-meetings?…` | ✅ | | Events calendar (results dates). |
+| `nse.annual_reports` | `www.nseindia.com/api/annual-reports?…` | ✅ | 5.4 KB list for TCS | PDFs → ladder step 3 (segment, RPT, contingent liabilities, auditor). |
+| `nse.bulk_deals` | `nsearchives.nseindia.com/content/equities/bulk.csv` | ✅ | `Date, Symbol, Security Name, Client Name, Buy/Sell, Quantity Traded, Trade Price …` | Daily file = today only. History via the date-range endpoint 🔎 M2. Block deals likewise. |
+| BSE filings (announcements, results, shareholding for BSE-only cos) | bseindia.com | 🔎 M2 | | BSE JSON API is 403 to scripts (above). The BSE attachment archive (`bseindia.com/xml-data/corpfiling/AttachHis/…pdf`) is publicly linked. **BSE-only company coverage is a real gap risk** (RISKS R-2). |
+| MCA21 (statutory financials, CIN, charges) | mca.gov.in | 🔎 M2 | | Document downloads are **paid per document**. Treated as a paid service, so it needs owner approval **[Q1]**. |
+
+### 3.1 Concall transcripts
+Companies must upload call recordings/transcripts and file them with the exchanges under **LODR Reg 46(2)(oa)** (introduced by the May-2021 amendments; we will pin the exact deadline wording from the SEBI notification in M6). Example verified: LIC Housing Finance transcript filed on NSE, 07-Aug-2021. **Consequence:** systematic transcript coverage across the universe exists only from roughly mid-2021. Before that, coverage is patchy (mostly large caps). This bounds the history of the Management Credibility pillar (RISKS R-6).
+
+## 4. Mutual funds (M2)
+
+| Key | Source | Status | Notes |
+|---|---|---|---|
+| `amfi.nav` | `www.amfiindia.com/spages/NAVAll.txt` | ✅ | 1.5 MB, daily NAV all schemes, includes scheme ↔ ISIN. |
+| `amfi.portfolio_disclosure` | `www.amfiindia.com/online-center/portfolio-disclosure` (links out) | ⚠️ | The page answers 200, but **scheme-level portfolios are published by each AMC on its own website** (SEBI mandate, monthly/fortnightly), in heterogeneous Excel layouts. About 45 AMCs means about 45 parsers. Plan: top 15 AMCs by AUM first (well over 80% of equity AUM; exact share computed in M2), then the long tail. |
+
+## 5. Macro, rates, policy (M5)
+
+| Key | Source | Status | Notes |
+|---|---|---|---|
+| `rbi.dbie` | `data.rbi.org.in/DBIE/` | ⚠️ | Portal reachable (SPA). Programmatic export path 🔎 M5. Covers credit, deposits, M3, sectoral deployment, rates, FX reserves, BoP. |
+| `rbi.press` | rbi.org.in press releases / MPC statements | 🔎 M5 | Policy rate history with announcement timestamps (needed for PIT). |
+| `mospi.api` | `api.mospi.gov.in` (Swagger UI) / `esankhyiki.mospi.gov.in` | ✅ reachable | Official API for CPI, IIP, GDP/GVA, WPI(?). Endpoint inventory 🔎 M5. **Release calendar** gives `known_at`; macro data is heavily *revised* (GDP, IIP), so every vintage is stored, not just the latest. |
+| `fred` | `api.stlouisfed.org/fred/…` | ⚠️ | API host answers (400 without key, as expected). **Needs a free API key**, the owner to register **[Q5]**. The `fred.stlouisfed.org` website timed out from this machine. ALFRED (vintages) gives PIT US data. |
+| `worldbank` | `api.worldbank.org/v2/…` | ✅ | JSON OK. Annual, low frequency. |
+| `imf` | IMF data API (SDMX) | 🔎 M5 | |
+| `gdelt` | `data.gdeltproject.org/gdeltv2/lastupdate.txt` | ✅ | 15-minute event/GKG files. Use for geopolitical intensity indices (Exposure Theatre). |
+| `cea` | cea.nic.in | ✅ reachable | Power demand / generation reports (PDF/Excel). |
+| `ppac` | ppac.gov.in | ✅ reachable | Fuel consumption, crude basket price. |
+| `dgtr` | dgtr.gov.in | ✅ reachable | Anti-dumping / safeguard notifications. |
+| PIB, Union Budget (indiabudget.gov.in), CGA, GST statistics, SEBI circulars, e-way bill, rail freight, SIAM/FADA auto sales, DGCA air traffic, HSN-level trade (tradestat.commerce.gov.in) | 🔎 M5 | SEBI `robots.txt` allows crawling except js/css. Several of these are PDF-only. |
+| Commodity prices (Brent, steel, copper, coal, freight indices/Baltic Dry) | 🔎 M5 | ⚠️ Many "public" commodity series (LME, Platts, Baltic Exchange) are **licensed**. Free proxies: FRED/World Bank Pink Sheet (monthly), PPAC Indian basket, exchange futures settlement (MCX). Gap to discuss **[Q1]**. |
+| PMI (S&P Global / HSBC India PMI) | — | ⚠️ | Headline numbers are in public press releases; the series is **proprietary**. Store headline only, with release PDF as lineage. |
+
+## 6. Credit ratings (M2/M9)
+
+Rating actions arrive two ways: (a) agency press releases (CRISIL, ICRA, CARE, India Ratings, Acuité, Brickwork, Infomerics) on agency sites; (b) the company's Reg 30 disclosure on the exchanges (already in `nse.announcements`). Plan: (b) first for coverage and `known_at`, (a) for detail. 🔎 M2.
+
+## 7. Terms of use: summary (not legal advice)
+
+- **NSE** `robots.txt` (fetched 2026-10-09): `Allow: /`, disallows only `/market-data-test`. But NSE's **Terms of Use** state the content is NSE's property and restrict aggregating or copying content *unless it is offered for download*, and NSE's **Data Policy** says redistribution of market data needs a licence via NSE Data & Analytics. The NSE data-portal terms explicitly prohibit automated collection without written consent. ([Terms of Use](https://www.nseindia.com/nse-terms-of-use), [Data policy](https://www.nseindia.com/market-data/nse-data-policy), [Data Sharing & Usage Policy PDF](https://nsearchives.nseindia.com/web/sites/default/files/inline-files/NSE_Data_Sharing%26Usage_Policy.pdf))
+  - Our reading: archive files explicitly offered for download (bhavcopies, EQUITY_L, delisted, bulk.csv, index closes) are the lowest-risk tier. The `/api/*` JSON endpoints that power the website are a **grey zone** for automated use. **Public redistribution of any NSE data needs a licence.**
+- **BSE**: `robots.txt` returns an HTML page (no machine-readable policy). The JSON API actively blocks scripts. Treat it like NSE.
+- **niftyindices.com**: has its own terms ([link](https://niftyindices.com/terms-of-use)); index data is licensed commercially.
+- **Government sources** (RBI, MOSPI, PIB, CEA, PPAC, DGTR, SEBI): generally under India's National Data Sharing and Accessibility Policy / Government Open Data Licence, permissive with attribution. Verify per source in M5.
+- **FRED / World Bank / GDELT:** permissive with attribution (FRED: some series carry third-party copyright, flagged per series).
+
+**Operating stance (proposed, ADR-006):** personal, non-commercial research use; prefer published download files over JSON endpoints wherever an equivalent exists; ≤ 1 req/s per exchange host, cache everything in raw so nothing is fetched twice; every source carries a `licence_status` in the registry (`public-open`, `public-restricted`, `licensed`, `unknown`), and the app refuses to start in a future `PUBLIC_MODE` while any `public-restricted`/`unknown` source feeds a visible screen. **The owner should decide whether this stance is acceptable [Q2].**
+
+## 8. Licensed alternatives (for the owner to consider; none added without approval)
+
+| Need | Free path weakness | Licensed options (indicative) |
+|---|---|---|
+| Deep PIT fundamentals (15y full statements, segments, restatement vintages) | XBRL only for the recent period; old years are PDFs | CMOTS, Accord Fintech (ACE Equity), Capitaline, Prowess (CMIE), LSEG/FactSet/S&P CapIQ |
+| PIT sector classification & index history | Must be reconstructed before 2022 | NSE Indices data licence, Prowess, vendors above |
+| Redistribution rights (if TRIKAL ever goes public) | Not available | NSE Data & Analytics, BSE data licence |
+| Commodity prices | Monthly proxies only | Exchange/vendor feeds |
