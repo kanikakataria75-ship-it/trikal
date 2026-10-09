@@ -469,6 +469,7 @@ def rebuild(con, raw: RawStore, index_code: str = "NIFTY500") -> dict:
         checks.append((index_code, d - dt.timedelta(days=1), size, len(cur), len(cur) == size,
                        f"before changes effective {d}"))
     coverage_start = min(by_date) if by_date else snap_date
+    first_published = min((e["published"] for e in live), default=snap_date)
     for sid, (end, out_ev) in open_iv.items():
         intervals.append((sid, None, end, None, out_ev))
 
@@ -479,12 +480,13 @@ def rebuild(con, raw: RawStore, index_code: str = "NIFTY500") -> dict:
             conf = 0.0
         method = "reconstructed" if start else "pre_coverage"
         vfrom = start or dt.date(1990, 1, 1)
-        k_in = end_of_day_ist(in_ev["published"]) if in_ev else end_of_day_ist(coverage_start)
+        k_in = end_of_day_ist(in_ev["published"]) if in_ev else end_of_day_ist(first_published)
         note = "" if start else f"member before the earliest parsed release ({coverage_start}); true start unknown"
         rows.append((index_code, sid, symbol_of.get(sid), vfrom, OPEN_END, k_in, method, conf, note))
         if end != OPEN_END:
-            rows.append((index_code, sid, symbol_of.get(sid), vfrom, end, end_of_day_ist(out_ev["published"]),
-                         method, conf, note))
+            # the closing version must always be known after the open version it supersedes
+            k_out = max(end_of_day_ist(out_ev["published"]), k_in + dt.timedelta(seconds=1))
+            rows.append((index_code, sid, symbol_of.get(sid), vfrom, end, k_out, method, conf, note))
 
     con.execute("BEGIN")
     con.execute("DELETE FROM index_event WHERE index_code = ?", [index_code])

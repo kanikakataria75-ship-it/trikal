@@ -188,6 +188,15 @@ def coverage(out: str = typer.Option("docs/reports/coverage.md", help="Markdown 
     typer.echo(f"wrote {out}")
 
 
+@app.command("fetch-m2")
+def fetch_m2(symbols_file: str = typer.Option("data/pilot_symbols.txt"),
+             since: str = typer.Option("2011-04-01", help="earliest period end for XBRL documents")) -> None:
+    """Overnight raw download for M2: per-company filing lists, then XBRL result documents (resumable)."""
+    from trikal_pipeline.sources.nse_company import run_overnight
+
+    run_overnight(symbols_file, since)
+
+
 @app.command("raw-status")
 def raw_status() -> None:
     """Summarise the raw zone fetch log."""

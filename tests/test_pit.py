@@ -195,3 +195,16 @@ def test_large_exchange_only_change_goes_to_review_not_applied(con):
     ev = con.execute("SELECT round(factor, 3), agreement, applied FROM adj_event").fetchall()
     assert ev == [(0.2, "implied_confirmed", False)]
     assert con.execute("SELECT count(*) FROM dq_issue WHERE kind = 'adj_implied_confirmed'").fetchone()[0] == 1
+
+
+def test_pre_coverage_member_excluded_before_first_effective_date_is_not_a_member_today(con, tmp_path):
+    # regression: open version stamped with the first *effective* date outranked an earlier-published exit
+    from trikal_core.timeutil import end_of_day_ist as eod_ist
+
+    insert_many(con, "INSERT INTO index_membership VALUES (?,?,?,?,?,?,?,?,?)", [
+        ("NIFTY500", "X:OLD", "OLD", D(1990, 1, 1), D(9999, 12, 31), eod_ist(D(1998, 9, 2)), "pre_coverage", 1.0, ""),
+        ("NIFTY500", "X:OLD", "OLD", D(1990, 1, 1), D(1999, 2, 3), eod_ist(D(1998, 12, 28)), "pre_coverage", 1.0, ""),
+    ])
+    r = PitReader(con)
+    assert "X:OLD" in {m[0] for m in r.index_members("NIFTY500", AsOf.end_of(D(1999, 1, 15)))}
+    assert "X:OLD" not in {m[0] for m in r.index_members("NIFTY500", AsOf.end_of(D(2026, 1, 1)))}
