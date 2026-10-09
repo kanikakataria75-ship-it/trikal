@@ -123,10 +123,11 @@ def fetch_index() -> None:
 def build() -> None:
     """Rebuild the security master and adjustment events from canonical inputs."""
     from trikal_core.db import connect, init_schema
-    from trikal_pipeline import adjustments, security_master
+    from trikal_pipeline import adjustments, calendar, security_master
 
     con = connect()
     init_schema(con)
+    typer.echo(f"calendar: {calendar.build(con, RawStore())}")
     t0 = time.monotonic()
     typer.echo(f"security master: {security_master.build(con)} ({time.monotonic() - t0:.0f}s)")
     t0 = time.monotonic()

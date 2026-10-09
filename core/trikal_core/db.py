@@ -57,6 +57,9 @@ CREATE TABLE IF NOT EXISTS price_eod (
     -- no PK index so that bulk rebuilds of ~30M rows stay fast.
 );
 
+-- Trading calendar derived from the fetch log; absent days are UNKNOWN (trikal_pipeline.calendar).
+CREATE TABLE IF NOT EXISTS exchange_day (exchange VARCHAR, d DATE, status VARCHAR);
+
 -- NSE master files (each load is a dated snapshot; history accumulates from first fetch).
 CREATE TABLE IF NOT EXISTS nse_symbol_change (
     company_name VARCHAR, old_symbol VARCHAR, new_symbol VARCHAR, change_date DATE,
