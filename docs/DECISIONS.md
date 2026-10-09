@@ -43,3 +43,14 @@ All ADRs below are **proposed** at M0 and become accepted when the owner signs o
 
 ### ADR-009 · 2026-10-09 · proposed: Unadjusted prices stored, adjustment on read, PIT-aware
 **Decision:** Only unadjusted prices + corporate actions are stored; adjustment factors are applied on read using actions with `announced_at <= as_of`.
+
+### ADR-010 · 2026-10-09 · proposed: DuckDB stand-in for Postgres during M1 (temporary deviation)
+**Context:** No Docker/Postgres on the dev machine.
+**Decision:** Canonical store = embedded DuckDB file (`data/trikal.duckdb`); raw-zone index = SQLite WAL (`data/raw/index.sqlite`) so fetchers can run as separate processes. All reads go through `trikal_core.pit.PitReader`, so a Postgres adapter can replace it later.
+**Consequences:** No DB-role enforcement yet (a test will guard imports instead). Revisit once Docker is available.
+
+### ADR-011 · 2026-10-09 · proposed: Security identity = ISIN stem
+**Decision:** `security_id = 'S:' + ISIN[:9]` (issuer + security type), so face-value changes (new ISIN serial) stay one security. Pre-ISIN rows inherit identity through same-code trading episodes or NSE symbol-change chains; otherwise a flagged synthetic id. Each listing row carries method + confidence.
+
+### ADR-012 · 2026-10-09 · proposed: Adjustment factors from the exchange's own base price
+**Decision:** On an ex-date the bhavcopy PREVCLOSE is the exchange-adjusted close, so factor = PREVCLOSE(t) / CLOSE(t-1). This is cross-checked against parsed announcements (match/mismatch/implied_only/parsed_only), and every disagreement is logged in `dq_issue`. Adjusted-as-of-D uses only events with ex_date <= D (this replaces the announcement-time rule in ARCHITECTURE §4.3).
