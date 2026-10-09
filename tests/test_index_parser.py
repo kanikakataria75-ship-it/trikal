@@ -75,3 +75,26 @@ Sr. No. Company Name Industry Name
     ev = parse_events("Change in S&P CNX 500 index w.e.f. March 17, 1999", text, D(1999, 2, 25))
     assert [(e["action"], e["company"][:12]) for e in ev] == [("out", "Precision Fa"), ("in", "Moser Baer L")]
     assert {e["effective_date"] for e in ev} == {D(1999, 3, 17)}
+
+
+def test_single_index_release_takes_index_from_title():
+    text = """The Index Maintenance Sub-Committee has decided to make the following change.
+The following company is being included:
+Sr. No. Company Name Symbol
+1 Marico LLiimmiitteedd MARICO"""
+    ev = parse_events("Change in CNX 500 Index w.e.f May 12, 2014", text, D(2014, 4, 25))
+    assert [(e["index_code"], e["action"], e["symbol"], e["company"]) for e in ev] == \
+        [("NIFTY500", "in", "MARICO", "Marico Limited")]
+    # multi-index titles must not set a default section
+    assert parse_events("Change in CNX Alpha, CNX High Beta & CNX 500 Index w.e.f July 1, 2014", text, D(2014, 7, 1)) == []
+
+
+def test_undouble_glyphs():
+    from trikal_pipeline.index_history import _undouble
+
+    assert _undouble("LLiimmiitteedd") == "Limited"
+    assert _undouble("eexxcclluuddeedd:") == "excluded:"
+    assert _undouble("JJJSSSWWW") == "JSW"
+    assert _undouble("&&") == "&"
+    for keep in ("TCS", "SBIN", "AAPL", "Ltd.", "3IINFOTECH", "M&M", "1:1"):
+        assert _undouble(keep) == keep

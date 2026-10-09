@@ -95,7 +95,8 @@ _INLINE_INDEX = re.compile(r"(?<!account of )(?:excluded from|included in)\s+(?:
                            r"((?:s&p\s+)?(?:cnx|nifty|crisil)\s*[\w&\-]*(?:\s+[\w&\-]+){0,3}?)\s*(?:index)?"
                            r"(?:\s+w\.?e\.?f|\s+with\s+effect|\s+as\b|\s+are\b|\s+is\b|\s*:|\s*$|\s+on\b|\s+from\b)", re.I)
 # A list-opening sentence. Company names containing "Inclusion" (Bharat Financial Inclusion) must not match.
-_ACTION = re.compile(r"\b(?:being|are|is|be)\s+(excluded|included)\b|^(exclusions?|inclusions?)\s*:?\s*$", re.I)
+# Spaces are sometimes lost in extraction ("Thefollowing companiesarebeingincluded:").
+_ACTION = re.compile(r"(?:being|are|is|be)\s*(excluded|included)\b|^(exclusions?|inclusions?)\s*:?\s*$", re.I)
 
 
 def norm_index_name(s: str) -> str:
@@ -123,16 +124,32 @@ def _clean_lines(text: str) -> list[str]:
             prev = line
             line = _CHROME.sub("", line).strip()
         if line:
-            out.append(line)
+            out.append(" ".join(_undouble(t) for t in line.split(" ")))
     return out
+
+
+def _undouble(token: str) -> str:
+    """Bold/shadowed text in some PDFs is extracted with every glyph two or three times:
+    'LLiimmiitteedd' -> 'Limited', 'eexxcclluuddeedd:' -> 'excluded:', 'JJJSSSWWW' -> 'JSW', '&&' -> '&'."""
+    core = token.rstrip(":,.;")
+    tail = token[len(core):]
+    for k in (3, 2):
+        long_enough = len(core) >= 2 * k or (core and not any(ch.isalnum() for ch in core))
+        if long_enough and len(core) % k == 0 and all(core[i::k] == core[0::k] for i in range(1, k)):
+            return core[0::k] + tail[: max(1, len(tail) // k)] if tail else core[0::k]
+    return token
 
 
 def parse_events(title: str, text: str, published: dt.date) -> list[dict]:
     """Return [{index_code, action, rank, raw, effective_date, section}] for target indices."""
     pr_eff = effective_date(title, text)
     events: list[dict] = []
-    cur_index: str | None = None      # code of the section we are in (None = some other index)
-    cur_section = ""
+    # Single-index releases ("Change in CNX 500 Index w.e.f May 12, 2014") carry no section heading.
+    mt = re.search(r"\b(?:changes?|replacements?|inclusions?|exclusions?)\s+in\s+(?:the\s+)?(.+?)\s+index\b(?!\s*,|\s+and)",
+                   title or "", re.I)
+    title_index = index_code_for(mt.group(1)) if mt and not re.search(r",| and |&", mt.group(1)) else None
+    cur_index: str | None = title_index  # code of the section we are in (None = some other index)
+    cur_section = mt.group(1) if title_index else ""
     action: str | None = None
     has_symbol_col = False
     sentence_eff: dt.date | None = None
@@ -227,7 +244,12 @@ class Resolver:
                 UNION SELECT 'S:' || substr(isin, 1, 9), name FROM index_snapshot
                 UNION SELECT security_id, latest_name FROM security WHERE latest_name NOT LIKE 'S:%' AND latest_name NOT LIKE 'X:%'
                 UNION SELECT DISTINCT 'S:' || substr(isin, 1, 9), name FROM price_eod
-                  WHERE name IS NOT NULL AND isin IS NOT NULL AND substr(isin, 8, 2) = '01')
+                  WHERE name IS NOT NULL AND isin IS NOT NULL AND substr(isin, 8, 2) = '01'
+                -- BSE legacy files (no ISIN) carry abbreviated names; link them through the listing
+                UNION SELECT DISTINCT l.security_id, e.name FROM price_eod e
+                  JOIN listing l ON l.exchange = 'BSE' AND l.code = e.code
+                                AND e.trade_date BETWEEN l.valid_from AND l.valid_to
+                  WHERE e.exchange = 'BSE' AND e.name IS NOT NULL AND e.isin IS NULL)
             SELECT DISTINCT security_id, name FROM n WHERE name IS NOT NULL""").fetchall()
         self.names: dict[str, list[tuple[str, str]]] = {}
         for sid, name in rows:
@@ -235,8 +257,11 @@ class Resolver:
             if key:
                 self.names.setdefault(key[:1], []).append((key, sid))
         self._nse_ranges: dict[str, list[tuple[dt.date, dt.date]]] = {}
-        for sid, f, t in con.execute("SELECT security_id, valid_from, valid_to FROM listing WHERE exchange = 'NSE'").fetchall():
+        self._nse_codes: list[tuple[str, str, dt.date, dt.date]] = []
+        for sid, code, f, t in con.execute(
+                "SELECT security_id, code, valid_from, valid_to FROM listing WHERE exchange = 'NSE'").fetchall():
             self._nse_ranges.setdefault(sid, []).append((f, t))
+            self._nse_codes.append((code.lower(), sid, f, t))
 
     def traded_near(self, sid: str, d: dt.date, before: int = 120, after: int = 10) -> bool:
         return any(f <= d + dt.timedelta(days=after) and t >= d - dt.timedelta(days=before)
@@ -268,6 +293,25 @@ class Resolver:
                     best = (sid, s)
         return best
 
+    def by_symbol_guess(self, company: str, d: dt.date) -> str | None:
+        """Old releases print no symbol. If the name's first word (>= 4 letters) starts exactly one NSE
+        symbol trading around the date ('Pantaloon Retail' -> PANTALOONR), take it."""
+        words = norm_company(company).split()
+        if not words or len(words[0]) < 4:
+            return None
+        lo, hi = d - dt.timedelta(days=120), d + dt.timedelta(days=10)
+        hits = {sid for code, sid, f, t in self._nse_codes if code.startswith(words[0]) and f <= hi and t >= lo}
+        if len(hits) != 1:
+            return None
+        sid = hits.pop()
+        # Reject when the security's known names contradict the release ('Reliance Petroleum' must not
+        # become RELIANCE = Reliance Industries just because the symbol starts with 'reliance').
+        known = [cand for bucket in self.names.values() for cand, s in bucket if s == sid]
+        key = norm_company(company)
+        if known and max(_similarity(key, k) for k in known) < 0.75:
+            return None
+        return sid
+
     def resolve(self, ev: dict) -> tuple[str | None, str, float]:
         d = ev["effective_date"]
         if ev.get("symbol"):
@@ -277,6 +321,9 @@ class Resolver:
         sid, score = self.by_name(ev["company"], d)
         if sid and score >= 0.80:
             return sid, "name", round(score, 3)
+        guess = self.by_symbol_guess(ev["company"], d)
+        if guess:
+            return guess, "symbol_guess", 0.9
         return None, "unresolved", round(score, 3)
 
 

@@ -15,6 +15,7 @@ dependencies = [
     "pdfplumber>=0.11",
     "pyyaml>=6",
     "tzdata>=2024.1",  # IANA zones on Windows
+    "pytz>=2024.1",  # DuckDB returns TIMESTAMPTZ values through pytz
 ]
 
 [project.optional-dependencies]

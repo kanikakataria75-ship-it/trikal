@@ -87,6 +87,16 @@ def parse_press_index(page: str) -> list[tuple[dt.date, str, str]]:
     return out
 
 
+def pdf_url(path: str) -> str:
+    """Absolute URL; repairs malformed links seen on the media page ('..._1', '...2008pdf')."""
+    url = BASE + path if path.startswith("/") else path
+    if url.lower().endswith("pdf") and not url.lower().endswith(".pdf"):
+        url = url[:-3] + ".pdf"
+    elif not url.lower().endswith(".pdf"):
+        url += ".pdf"
+    return url
+
+
 def is_relevant(title: str) -> bool:
     return not _IRRELEVANT.search(title)
 
@@ -96,7 +106,7 @@ def fetch_press_pdfs(fetcher: Fetcher, raw: RawStore) -> dict[str, int]:
     done = raw.done_partitions("nifty.press")
     stats = {"ok": 0, "skipped_irrelevant": 0, "already": 0, "error": 0}
     for published, path, title in items:
-        url = BASE + path if path.startswith("/") else path
+        url = pdf_url(path)
         if not is_relevant(title):
             stats["skipped_irrelevant"] += 1
             continue
@@ -114,8 +124,11 @@ def fetch_press_pdfs(fetcher: Fetcher, raw: RawStore) -> dict[str, int]:
             raw.log("nifty.press", url, url, "ok", r.status, sha)
             stats["ok"] += 1
         else:
-            raw.log("nifty.press", url, url, "not_found" if r.status == 404 else "error", r.status, None)
-            stats["error"] += 1
+            # the site answers its HTML 'page not found' with status 200
+            missing = r.status == 404 or r.body.lstrip()[:15].lower().startswith(b"<!doctype")
+            raw.log("nifty.press", url, url, "not_found" if missing else "error", r.status, None,
+                    "site returned an HTML page instead of the PDF" if missing else None)
+            stats["not_found" if missing else "error"] = stats.get("not_found" if missing else "error", 0) + 1
     return stats
 
 
@@ -129,7 +142,7 @@ def load_press_index(con: duckdb.DuckDBPyConnection, raw: RawStore) -> int:
     con.execute("DELETE FROM press_release")
     rows = {}
     for published, path, title in items:
-        url = BASE + path if path.startswith("/") else path
+        url = pdf_url(path)
         sha = pdfs.get(url)
         status = "irrelevant_title" if not is_relevant(title) else ("fetched" if sha else "missing")
         rows[url] = (url, published, title, sha, status)
