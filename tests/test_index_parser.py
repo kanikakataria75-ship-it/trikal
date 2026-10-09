@@ -98,3 +98,12 @@ def test_undouble_glyphs():
     assert _undouble("&&") == "&"
     for keep in ("TCS", "SBIN", "AAPL", "Ltd.", "3IINFOTECH", "M&M", "1:1"):
         assert _undouble(keep) == keep
+
+
+def test_symbol_found_before_wrapped_date_text():
+    text = """1) CNX 500 Index
+The following company is being included:
+Sr. No. Company Name Symbol
+1 United Breweries (Holdings) Limited UBHOLDINGS April 9,"""
+    ev = parse_events("Change in indices w.e.f. April 9, 2012", text, D(2012, 4, 4))
+    assert [(e["symbol"], e["company"]) for e in ev] == [("UBHOLDINGS", "United Breweries (Holdings) Limited")]

@@ -17,14 +17,15 @@ Decision rules (agreement -> applied?):
   parsed_confirmed       parsed; observed close/prev close within PRICE_BAND of the factor  -> apply
   parsed_unconfirmed     parsed; no clean observation (gap / unknown days)                 -> apply, DQ
   parsed_price_disagrees parsed; observed move contradicts it                      -> NOT applied, DQ
-  implied_only           trusted implied, no announcement in our feed                     -> apply
+  implied_confirmed      no announcement; split-sized implied factor that the observed move follows
+                         -> NOT applied (base-price resets look identical), DQ review queue
+  implied_only           no announcement; small or unconfirmed (PREVCLOSE noise)           -> NOT applied
   unverifiable           implied over a gap, no announcement                       -> NOT applied, DQ
 Events take effect at the pre-open of that session (known_at 09:00 IST, precision 'convention').
 """
 
 from __future__ import annotations
 
-import bisect
 import math
 
 import duckdb
@@ -36,7 +37,8 @@ from trikal_pipeline.security_master import EQUITY_VIEW
 
 TOLERANCE = 0.02  # parsed vs implied
 PRICE_BAND = (0.80, 1.25)  # observed ratio / factor must fall inside (normal daily move + circuit)
-JUMP_BAND = (0.60, 1.60)  # beyond any circuit band: needs an explanation
+JUMP_BAND = (0.60, 1.60)
+IMPLIED_MIN_FACTOR = 0.80  # exchange-only factors must be at least this far from 1 (|ln f| > ln 1.25)  # beyond any circuit band: needs an explanation
 
 
 def build(con: duckdb.DuckDBPyConnection) -> dict[str, int]:
@@ -70,7 +72,7 @@ def build(con: duckdb.DuckDBPyConnection) -> dict[str, int]:
         FROM q""")
     # clean = previous close is from the immediately previous session with no unknown days between
     implied = con.execute("""
-        SELECT security_id, exchange, code, trade_date, prev_close / prev_actual
+        SELECT security_id, exchange, code, trade_date, prev_close / prev_actual, close / prev_actual
         FROM px
         WHERE prev_actual > 0 AND prev_close > 0 AND gap = 1 AND unknown_days = 0
           AND abs(prev_close - prev_actual) > greatest(0.0015 * prev_actual, 0.051)""").fetchall()
@@ -80,59 +82,52 @@ def build(con: duckdb.DuckDBPyConnection) -> dict[str, int]:
         WHERE prev_actual > 0 AND prev_close > 0 AND NOT (coalesce(gap, 0) = 1 AND coalesce(unknown_days, 1) = 0)
           AND abs(prev_close - prev_actual) > greatest(0.0015 * prev_actual, 0.051)""").fetchall()
 
-    ann = con.execute("""
-        SELECT DISTINCT l.security_id, ca.ex_date, ca.subject, ca.face_value
-        FROM corp_action ca
-        JOIN listing l ON l.exchange = 'NSE' AND l.code = ca.code
-                      AND ca.ex_date BETWEEN l.valid_from - 30 AND l.valid_to + 30
-        WHERE regexp_matches(ca.kind, 'split|consolidation|bonus|rights|demerger|capital_reduction')""").fetchall()
-    ann_by_sec: dict[str, list] = {}
-    for sid, ex, subj, fv in ann:
-        ann_by_sec.setdefault(sid, []).append((ex, subj, fv))
-
-    rows_by_sec = {}
-    for sid, x, dates, closes, prevs, gaps, unk in con.execute("""
-            SELECT security_id, exchange, list(trade_date ORDER BY trade_date), list(close ORDER BY trade_date),
-                   list(prev_actual ORDER BY trade_date), list(gap ORDER BY trade_date),
-                   list(unknown_days ORDER BY trade_date)
-            FROM px
-            WHERE (security_id, exchange, code) IN (
+    # Announced actions, each placed on the first session on/after its ex-date on each exchange
+    # (ASOF join in SQL: pulling every session into Python does not fit in memory for 30 years of data).
+    placed = con.execute("""
+        WITH ann AS (
+            SELECT DISTINCT l.security_id, ca.ex_date, ca.subject, ca.face_value
+            FROM corp_action ca
+            JOIN listing l ON l.exchange = 'NSE' AND l.code = ca.code
+                          AND ca.ex_date BETWEEN l.valid_from - 30 AND l.valid_to + 30
+            WHERE regexp_matches(ca.kind, 'split|consolidation|bonus|rights|demerger|capital_reduction')),
+        ann_x AS (SELECT a.*, x.exchange FROM ann a CROSS JOIN (VALUES ('NSE'), ('BSE')) x(exchange)),
+        main AS (
+            SELECT * FROM px WHERE (security_id, exchange, code) IN (
                 SELECT security_id, exchange, arg_max(code, n) FROM (
-                    SELECT security_id, exchange, code, count(*) n FROM px GROUP BY ALL) GROUP BY 1, 2)
-            GROUP BY 1, 2""").fetchall():
-        rows_by_sec[(sid, x)] = (dates, closes, prevs, gaps, unk)
+                    SELECT security_id, exchange, code, count(*) n FROM px GROUP BY ALL) GROUP BY 1, 2))
+        SELECT a.security_id, a.exchange, a.ex_date, a.subject, a.face_value,
+               m.trade_date, m.close, m.prev_actual, m.gap, m.unknown_days
+        FROM ann_x a ASOF JOIN main m
+          ON a.security_id = m.security_id AND a.exchange = m.exchange AND m.trade_date >= a.ex_date
+        WHERE m.trade_date - a.ex_date <= 10""").fetchall()
 
     def blank(sid, x, code, d):
         return dict(sid=sid, x=x, code=code, d=d, implied=None, suspect=None, parsed=None, observed=None,
                     kind=None, subject=None, note="")
 
     events: dict[tuple, dict] = {}
-    for sid, x, code, d, f in implied:
-        events[(sid, x, d)] = blank(sid, x, code, d) | {"implied": f}
+    for sid, x, code, d, f, obs in implied:
+        events[(sid, x, d)] = blank(sid, x, code, d) | {"implied": f, "observed": obs}
     for sid, x, code, d, f, gap, unk in suspect:
         e = events.setdefault((sid, x, d), blank(sid, x, code, d))
         e["suspect"], e["note"] = f, f"gap={gap} unknown_days={unk}"
 
-    for (sid, x), (dates, closes, prevs, gaps, unk) in rows_by_sec.items():
-        for ex, subj, fv in ann_by_sec.get(sid, []):
-            i = bisect.bisect_left(dates, ex)
-            if i >= len(dates) or (dates[i] - ex).days > 10:
-                continue
-            d, pa = dates[i], prevs[i]
-            clean = gaps[i] == 1 and unk[i] == 0 and pa
-            p = parse_subject(subj, face_value=fv)
-            f = p.static_factor()
-            r = next((a for a in p.actions if a.kind == "rights"), None)
-            if r and r.num and r.den and pa and r.amount is not None:
-                issue = r.amount + (fv or 0) if r.note == "premium" else r.amount
-                f = (f or 1.0) * ((r.den * pa + r.num * issue) / (r.num + r.den)) / pa
-            e = events.setdefault((sid, x, d), blank(sid, x, None, d))
-            e["kind"] = "+".join(filter(None, [e["kind"], p.kind]))
-            e["subject"] = " | ".join(filter(None, [e["subject"], subj]))
-            if f is not None:
-                e["parsed"] = (e["parsed"] or 1.0) * f
-            if clean and closes[i]:
-                e["observed"] = closes[i] / pa
+    for sid, x, ex, subj, fv, d, close, pa, gap, unk in placed:
+        clean = gap == 1 and unk == 0 and pa
+        p = parse_subject(subj, face_value=fv)
+        f = p.static_factor()
+        r = next((a for a in p.actions if a.kind == "rights"), None)
+        if r and r.num and r.den and pa and r.amount is not None:
+            issue = r.amount + (fv or 0) if r.note == "premium" else r.amount
+            f = (f or 1.0) * ((r.den * pa + r.num * issue) / (r.num + r.den)) / pa
+        e = events.setdefault((sid, x, d), blank(sid, x, None, d))
+        e["kind"] = "+".join(filter(None, [e["kind"], p.kind]))
+        e["subject"] = " | ".join(filter(None, [e["subject"], subj]))
+        if f is not None:
+            e["parsed"] = (e["parsed"] or 1.0) * f
+        if clean and close:
+            e["observed"] = close / pa
 
     rows, dq = [], []
     now = utcnow()
@@ -150,14 +145,22 @@ def build(con: duckdb.DuckDBPyConnection) -> dict[str, int]:
             else:
                 agreement, applied = "parsed_price_disagrees", False
         elif imp is not None:
-            agreement, factor, method, applied = "implied_only", imp, "exchange_base_price", True
+            # No announcement. PREVCLOSE disagrees with the actual previous close on ~1-2% of rows in some
+            # eras for reasons unrelated to corporate actions, so an exchange-only factor is applied only
+            # when it is split/bonus-sized AND the observed price move confirms it.
+            big = abs(math.log(imp)) > math.log(1 / IMPLIED_MIN_FACTOR)
+            confirmed = obs is not None and PRICE_BAND[0] <= obs / imp <= PRICE_BAND[1]
+            # Even then it is NOT applied: spot checks showed base-price resets (after suspensions or band
+            # changes) that the close then follows, e.g. factors > 1 with no consolidation. Review queue only.
+            agreement = "implied_confirmed" if (big and confirmed) else "implied_only"
+            factor, method, applied = imp, "exchange_base_price", False
         elif e["suspect"] is not None:
             agreement, factor, method, applied = "unverifiable", e["suspect"], "exchange_base_price", False
         else:
             continue  # announced non-static action (e.g. demerger) with no price signal: nothing to apply
         if factor is None or not math.isfinite(factor) or factor <= 0:
             continue
-        if agreement in ("mismatch", "parsed_unconfirmed", "parsed_price_disagrees", "unverifiable"):
+        if agreement in ("mismatch", "parsed_unconfirmed", "parsed_price_disagrees", "unverifiable", "implied_confirmed"):
             sev = {"mismatch": "medium", "parsed_price_disagrees": "medium"}.get(agreement, "low")
             dq.append(("adj_" + agreement, e["x"], e["sid"], e["d"],
                        f"implied={imp} parsed={par} observed={obs} suspect={e['suspect']} {e['note']} "

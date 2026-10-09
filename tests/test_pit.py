@@ -172,3 +172,26 @@ def test_only_core_and_pipeline_touch_the_database_directly():
             if "trikal_core.db" in text or "import duckdb" in text:
                 offenders.append(str(f.relative_to(root)))
     assert offenders == []
+
+
+def test_small_exchange_only_discrepancy_is_not_applied(con):
+    # PREVCLOSE differs by 3% with no announcement: noise in old files, not a corporate action
+    days = [D(2001, 10, 16), D(2001, 10, 17)]
+    add_sessions(con, "NSE", days)
+    add_prices(con, [("NSE", days[0], "FIX", "EQ", None, 100.0, 100.0),
+                     ("NSE", days[1], "FIX", "EQ", None, 98.0, 97.0)])
+    _build_master(con)
+    assert con.execute("SELECT agreement, applied FROM adj_event").fetchall() == [("implied_only", False)]
+
+
+def test_large_exchange_only_change_goes_to_review_not_applied(con):
+    # could be a BSE-only company's 1:5 split - or a base-price reset; without an announcement we do not guess
+    days = [D(2019, 3, 1), D(2019, 3, 4)]
+    add_sessions(con, "BSE", days)
+    add_sessions(con, "BSE", [D(2019, 3, 2), D(2019, 3, 3)], "no_session")
+    add_prices(con, [("BSE", days[0], "500001", "B", ISIN, 500.0, 495.0),
+                     ("BSE", days[1], "500001", "B", ISIN, 101.0, 100.0)])
+    _build_master(con)
+    ev = con.execute("SELECT round(factor, 3), agreement, applied FROM adj_event").fetchall()
+    assert ev == [(0.2, "implied_confirmed", False)]
+    assert con.execute("SELECT count(*) FROM dq_issue WHERE kind = 'adj_implied_confirmed'").fetchone()[0] == 1

@@ -28,6 +28,12 @@ def connect(path: Path | str | None = None, read_only: bool = False) -> duckdb.D
     p = str(path or db_path())
     con = duckdb.connect(p, read_only=read_only)
     con.execute("SET TimeZone = 'Asia/Kolkata'")
+    # 8 GB laptop: let large window/sort operations spill to disk instead of failing
+    con.execute("SET preserve_insertion_order = false")
+    if not read_only:
+        tmp = data_dir() / "duckdb_tmp"
+        tmp.mkdir(exist_ok=True)
+        con.execute(f"SET temp_directory = '{tmp.as_posix()}'")
     return con
 
 

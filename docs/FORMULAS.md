@@ -41,6 +41,7 @@ Rows without an ISIN (NSE before Aug-2011, BSE before ~2017) inherit identity in
 | `isin` | the row carries a valid company-equity ISIN | 1.00 |
 | `code_continuity` | same exchange code, same trading *episode*, before the episode's first ISIN-bearing row | 0.95 |
 | `symbol_chain` | NSE `symbolchange.csv` links the episode to a later episode that has an ISIN | 0.90 |
+| `cross_exchange_price` | an NSE listing with no ISIN closes within ±2% of exactly one BSE scrip code on all of 6 sessions sampled across its life; it takes that BSE code's identity (often ISIN-based, because BSE codes are stable into the ISIN era) | 0.85 |
 | `synthetic` | nothing reachable: `X:<exchange>:<code>:<first trade date>` | 0.80 |
 
 A **trading episode** is a run of sessions for one exchange code. A new episode starts after a gap of
@@ -79,7 +80,8 @@ strictly before its ex-date. Volumes are divided by the same factor.
 | `parsed_confirmed` | `0.80 ≤ observed/parsed ≤ 1.25` | yes |
 | `parsed_unconfirmed` | no clean observation | yes, DQ issue |
 | `parsed_price_disagrees` | observed move contradicts it | **no**, DQ issue |
-| `implied_only` | trusted implied, no announcement in the feed | yes |
+| `implied_confirmed` | no announcement; implied factor beyond ±25% (split/bonus-sized) **and** the close follows it | **no**, DQ review queue: base-price resets after suspensions look identical (e.g. factors > 1 with no consolidation) |
+| `implied_only` | no announcement; small or unconfirmed (PREVCLOSE disagrees with the true previous close on ~1–2% of rows in some eras for reasons unrelated to corporate actions) | **no** |
 | `unverifiable` | implied factor across a gap or unknown days | **no**, DQ issue |
 
 **Adjusted price as of D** = `price(t) × Π factor(e)` over applied events `e` with

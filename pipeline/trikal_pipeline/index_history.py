@@ -185,9 +185,14 @@ def parse_events(title: str, text: str, published: dt.date) -> list[dict]:
             body = mr.group(2)
             sym = None
             if has_symbol_col:
-                parts = body.rsplit(" ", 1)
-                if len(parts) == 2 and re.fullmatch(r"[A-Z0-9&\-\.]{1,20}", parts[1]):
-                    body, sym = parts[0], parts[1]
+                toks = body.split(" ")
+                # trailing text from a wrapped sentence ('... UBHOLDINGS April 9,') is skipped
+                # month words are Title-case ('April'); an all-caps 'MARICO' is a symbol, not 'Mar...'
+                while len(toks) > 1 and re.fullmatch(r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?|"
+                                                     r"\d{1,4},?|\(?close|of|\)", toks[-1]):
+                    toks.pop()
+                if len(toks) > 1 and re.fullmatch(r"[A-Z0-9&\-\.]{2,20}", toks[-1]) and re.search(r"[A-Z]", toks[-1]):
+                    body, sym = " ".join(toks[:-1]), toks[-1]
             events.append(dict(index_code=cur_index, action=action, rank=int(mr.group(1)), company=body.strip(),
                                symbol=sym, effective_date=sentence_eff or pr_eff or published,
                                eff_source="sentence" if sentence_eff else ("release" if pr_eff else "published"),
@@ -274,6 +279,12 @@ class Resolver:
             [sym.upper(), d + dt.timedelta(days=10), d - dt.timedelta(days=120)]).fetchall()
         if rows:
             return rows[0][0]
+        # symbol wrapped onto the next line in the PDF ('UBHOLDING' + 'S'): unique prefix match near the date
+        if len(sym) >= 5:
+            lo, hi = d - dt.timedelta(days=120), d + dt.timedelta(days=10)
+            hits = {sid for code, sid, f, t in self._nse_codes if code.startswith(sym.lower()) and f <= hi and t >= lo}
+            if len(hits) == 1:
+                return hits.pop()
         # constituents outside the equity master (REIT/InvIT units): identify by the ISIN the code traded under
         row = self.con.execute(
             """SELECT 'S:' || substr(isin, 1, 9) FROM price_eod WHERE exchange = 'NSE' AND code = ?
@@ -297,18 +308,33 @@ class Resolver:
         """Old releases print no symbol. If the name's first word (>= 4 letters) starts exactly one NSE
         symbol trading around the date ('Pantaloon Retail' -> PANTALOONR), take it."""
         words = norm_company(company).split()
-        if not words or len(words[0]) < 4:
+        if not words or len(words[0]) < 3:
             return None
+        first = words[0]
+        letters = re.sub(r"[^a-z0-9]", "", company.lower())
+        rest_name = letters[letters.find(first) + len(first):] if first in letters else ""
         lo, hi = d - dt.timedelta(days=120), d + dt.timedelta(days=10)
-        hits = {sid for code, sid, f, t in self._nse_codes if code.startswith(words[0]) and f <= hi and t >= lo}
-        if len(hits) != 1:
+        cands = {(sid, re.sub(r"[^a-z0-9]", "", code)) for code, sid, f, t in self._nse_codes
+                 if code.startswith(first) and f <= hi and t >= lo}
+        # Strong: the symbol extends the first word with letters found, in order, in the rest of the name
+        # (PANTALOONR <- Pantaloon Retail, PIPAVAVYD <- Pipavav shipYarD, AREVAT&D <- Areva T&D).
+        # Valid even if the company was renamed later.
+        def strong(code: str) -> bool:
+            it = iter(rest_name)
+            tail = code[len(first):]
+            return bool(tail) and all(ch in it for ch in tail)
+
+        strong_sids = {sid for sid, code in cands if strong(code)}
+        if len(strong_sids) == 1:
+            return strong_sids.pop()
+        hits = {sid for sid, _ in cands}
+        if len(hits) != 1 or len(first) < 4:
             return None
         sid = hits.pop()
-        # Reject when the security's known names contradict the release ('Reliance Petroleum' must not
-        # become RELIANCE = Reliance Industries just because the symbol starts with 'reliance').
+        # Weak (symbol == first word only): reject when the security's known names contradict the release
+        # ('Reliance Petroleum' must not become RELIANCE = Reliance Industries).
         known = [cand for bucket in self.names.values() for cand, s in bucket if s == sid]
-        key = norm_company(company)
-        if known and max(_similarity(key, k) for k in known) < 0.75:
+        if known and max(_similarity(norm_company(company), k) for k in known) < 0.75:
             return None
         return sid
 

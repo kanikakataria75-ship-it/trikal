@@ -32,6 +32,7 @@ Severity: **H** can invalidate results or block a milestone · **M** degrades a 
 | ID | Risk | Sev | Mitigation |
 |---|---|---|---|
 | R-1 | **NSE/BSE terms** restrict aggregation and redistribution; NSE data-portal terms prohibit automated collection without consent; JSON endpoints are a grey zone even for personal use. | H | ADR-006 stance: personal use; prefer published downloads; strict rate limits + caching; `licence_status` per source; no public deployment until licensed. **Owner decision [Q2].** |
+| R-25 | **Corporate actions of BSE-only companies** are not in the NSE announcement feed; the exchange-only signal cannot be told apart from base-price resets, so such actions are **not applied** (review queue `adj_implied_confirmed`). Adjusted prices of BSE-only names may be wrong across those dates. The pilot universe (Nifty 500 ever-members) is NSE-listed, so it is covered by announcements. | M | BSE corporate-actions source (BSE API blocks scripts) or a licensed feed before widening to the full universe. |
 | R-24 | **Holes inside source files** (a security missing from a day's bhavcopy although it traded, e.g. BSE 15-Jul-2022). | M | Never infer events across such gaps; a cross-exchange completeness check (NSE vs BSE rows for dual-listed names) is planned for the coverage report. |
 | R-18 | Endpoint fragility: NSE/BSE change URLs, formats (e.g. the bhavcopy UDiFF switch) and anti-bot measures without notice. | M | `source_health` daily check, raw zone keeps everything already fetched, parsers versioned by format. |
 

@@ -5,7 +5,9 @@ Identity rules, in order of confidence:
   2. code_continuity Same exchange code, same trading episode, rows before the file format carried
                      ISINs -> inherit the episode's first ISIN stem                         (conf 0.95)
   3. symbol_chain    NSE symbol was renamed (symbolchange.csv) into an episode that has an ISIN (conf 0.9)
-  4. synthetic       No ISIN reachable (e.g. delisted before Aug-2011) -> 'X:<exch>:<code>:<first>' (conf 0.8)
+  4. cross_exchange_price  No ISIN on NSE, but closes match exactly one BSE scrip code on sampled
+                     sessions -> that code's identity (conf 0.85); see _cross_exchange_price_match
+  5. synthetic       No ISIN reachable (e.g. delisted before Aug-2011) -> 'X:<exch>:<code>:<first>' (conf 0.8)
 
 A trading *episode* is a run of sessions for one exchange code without a gap of more than
 EPISODE_GAP sessions and without an NSE delisting record inside it; symbol reuse after a delisting
@@ -118,6 +120,7 @@ def build(con: duckdb.DuckDBPyConnection) -> dict[str, int]:
     con.execute("BEGIN")
     con.execute("DELETE FROM listing")
     insert_many(con, "INSERT INTO listing VALUES (?,?,?,?,?,?,?)", listing_rows)
+    cross_links = _cross_exchange_price_match(con)
 
     con.execute("DELETE FROM security_isin")
     con.execute("""
@@ -166,5 +169,58 @@ def build(con: duckdb.DuckDBPyConnection) -> dict[str, int]:
         "securities": con.execute("SELECT count(*) FROM security").fetchone()[0],
         "symbol_links": len(successor),
         "symbol_changes_unmatched": len(unmatched_changes),
+        "cross_exchange_links": cross_links,
         "multi_stem_episodes": len(multi),
     }
+
+
+CROSS_SAMPLES = 6        # sampled common sessions per NSE listing
+CROSS_TOLERANCE = 0.02   # |close_nse / close_bse - 1| on every sampled session
+
+
+def _cross_exchange_price_match(con: duckdb.DuckDBPyConnection) -> int:
+    """Link NSE listings without an ISIN (synthetic ids) to the BSE listing of the same company.
+
+    The same company trades at (almost) the same close on both exchanges. If an NSE listing's closes
+    match one - and only one - BSE scrip code within CROSS_TOLERANCE on every one of CROSS_SAMPLES
+    sessions spread over its life, the two are the same security. The BSE scrip code is stable and often
+    reaches the ISIN era, so this recovers the ISIN identity of pre-2011 NSE symbols (REIAGRO ->
+    S:INE385B01) and unifies NSE/BSE synthetic ids. Method 'cross_exchange_price', confidence 0.85.
+    """
+    con.execute(f"""
+        CREATE OR REPLACE TEMP TABLE _samples AS
+        WITH r AS (
+            SELECT l.security_id, l.code, e.trade_date, e.close,
+                   ntile({CROSS_SAMPLES}) OVER (PARTITION BY l.security_id, l.code ORDER BY e.trade_date) AS bucket
+            FROM listing l JOIN eq e ON e.exchange = 'NSE' AND e.code = l.code
+                                    AND e.trade_date BETWEEN l.valid_from AND l.valid_to
+            WHERE l.exchange = 'NSE' AND l.method = 'synthetic' AND e.close > 0
+              AND e.trade_date >= (SELECT min(trade_date) FROM price_eod WHERE exchange = 'BSE'))
+        SELECT security_id, code, bucket, arg_min(trade_date, trade_date) AS d,
+               arg_min(close, trade_date) AS c
+        FROM r GROUP BY ALL""")
+    pairs = con.execute(f"""
+        WITH n AS (SELECT security_id, code, count(*) AS k FROM _samples GROUP BY ALL HAVING count(*) >= 4),
+        m AS (
+            SELECT s.security_id, s.code AS nse_code, b.code AS bse_code, count(DISTINCT s.bucket) AS hits
+            FROM _samples s JOIN eq b ON b.exchange = 'BSE' AND b.trade_date = s.d
+                                     AND abs(b.close / s.c - 1) <= {CROSS_TOLERANCE}
+            GROUP BY ALL)
+        SELECT m.security_id, m.nse_code, m.bse_code
+        FROM m JOIN n USING (security_id)
+        WHERE m.hits = n.k
+        QUALIFY count(*) OVER (PARTITION BY m.security_id) = 1""").fetchall()
+    linked = 0
+    for nse_sid, nse_code, bse_code in pairs:
+        bse_sids = [r[0] for r in con.execute(
+            "SELECT DISTINCT security_id FROM listing WHERE exchange = 'BSE' AND code = ?", [bse_code]).fetchall()]
+        isin_sids = [s for s in bse_sids if s.startswith("S:")]
+        if len(isin_sids) > 1:
+            continue  # the BSE code itself spans several ISIN identities: ambiguous, leave as is
+        target = isin_sids[0] if isin_sids else nse_sid
+        con.execute("""UPDATE listing SET security_id = ?, method = 'cross_exchange_price', confidence = 0.85
+                       WHERE exchange = 'NSE' AND security_id = ? AND method = 'synthetic'""", [target, nse_sid])
+        con.execute("""UPDATE listing SET security_id = ?, method = 'cross_exchange_price', confidence = 0.85
+                       WHERE exchange = 'BSE' AND code = ? AND method = 'synthetic'""", [target, bse_code])
+        linked += 1
+    return linked
