@@ -1,0 +1,120 @@
+/* TRIKAL — Obsidian & Gold (UI_SPEC §9). Tokens first; everything else uses them. */
+:root {
+  --bg-0: #07080a;
+  --bg-1: #0d0f12;
+  --bg-2: #14171c;
+  --bg-3: #1c2027;
+  --line: #262b33;
+  --line-strong: #3a414c;
+
+  --fg-0: #e8e6e1;
+  --fg-1: #a7a9ae;
+  --fg-2: #6b7079;
+
+  --gold-0: #f2d27a;
+  --gold-1: #d4af37;
+  --gold-2: #8c6f1e;
+  --gold-glow: rgba(242, 210, 122, 0.35);
+
+  --pos: #2ec4b6;
+  --neg: #f0577a;
+  --warn: #e8a33d;
+  --info: #7aa2f7;
+
+  --radius: 10px;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --font-ui: var(--font-inter-tight), "Inter Tight", system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), "JetBrains Mono", ui-monospace, monospace;
+  --font-display: var(--font-instrument), "Instrument Serif", Georgia, serif;
+  --font-deva: var(--font-tiro), "Tiro Devanagari Hindi", serif;
+}
+
+[data-cb="1"] {
+  /* colour-blind safe data colours */
+  --pos: #4ea1ff;
+  --neg: #ff9f1c;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--bg-0); color: var(--fg-0); }
+body {
+  font-family: var(--font-ui);
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+a { color: inherit; text-decoration: none; }
+button { font: inherit; color: inherit; }
+::selection { background: rgba(212, 175, 55, 0.35); color: #fff; }
+
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.display { font-family: var(--font-display); font-weight: 400; letter-spacing: -0.01em; }
+.deva { font-family: var(--font-deva); }
+.gold-text {
+  background: linear-gradient(100deg, var(--gold-2) 0%, var(--gold-0) 30%, #fff6d8 46%, var(--gold-1) 62%, var(--gold-2) 100%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: goldsheen 7s var(--ease) infinite;
+}
+@keyframes goldsheen { 0% { background-position: 100% 0; } 60%, 100% { background-position: -20% 0; } }
+
+:focus-visible { outline: 2px solid var(--gold-1); outline-offset: 2px; border-radius: 4px; }
+
+/* scrollbars */
+* { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 8px; }
+
+/* film grain overlay used on marketing surfaces */
+.grain::after {
+  content: ""; position: fixed; inset: -50%; pointer-events: none; z-index: 60; opacity: 0.06;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  animation: grain 1.2s steps(6) infinite;
+}
+@keyframes grain {
+  0% { transform: translate(0, 0); } 20% { transform: translate(-3%, 2%); } 40% { transform: translate(2%, -3%); }
+  60% { transform: translate(-2%, -1%); } 80% { transform: translate(3%, 3%); } 100% { transform: translate(0, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+}
+
+/* ---------- value states (UI_SPEC §6) ---------- */
+.v { font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.v-muted { color: var(--fg-2); }
+.v-lock { color: var(--fg-2); display: inline-flex; align-items: center; gap: 4px; }
+.v-dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--warn); margin-left: 4px; vertical-align: middle; }
+.v-r { color: var(--gold-1); font-size: 0.7em; vertical-align: super; margin-left: 1px; }
+.pos { color: var(--pos); }
+.neg { color: var(--neg); }
+
+/* tooltip */
+.tip {
+  position: fixed; z-index: 100; max-width: 380px; pointer-events: none;
+  background: rgba(13, 15, 18, 0.96); border: 1px solid var(--line-strong); border-radius: 8px;
+  padding: 10px 12px; font-size: 12px; color: var(--fg-1); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(10px);
+}
+.tip b { color: var(--fg-0); font-weight: 600; }
+.tip .k { color: var(--fg-2); }
+
+/* ---------- 3D labels (drei Html) ---------- */
+.arc-label { white-space: nowrap; font-size: 10px; letter-spacing: 0.22em; color: rgba(212, 175, 55, 0.75); pointer-events: none; text-shadow: 0 0 12px #000; }
+.arc-label .deva { font-size: 13px; letter-spacing: 0; margin-right: 6px; color: var(--gold-0); }
+.arc-now { color: var(--gold-0); }
+.arc-future { color: rgba(212, 175, 55, 0.45); }
+.strata-tip {
+  min-width: 170px; padding: 12px 14px; border-radius: 12px; font-size: 12px; color: var(--fg-1); line-height: 1.7; pointer-events: none;
+  background: rgba(13, 15, 18, 0.88); border: 1px solid rgba(212, 175, 55, 0.3); backdrop-filter: blur(8px); box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+}
+.strata-tip b { color: var(--fg-0); font-weight: 500; }
+.strata-year { font-family: var(--font-display); font-size: 30px; color: var(--gold-0); line-height: 1; margin-bottom: 6px; }
+.spine-pulse { animation: spulse 2.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes spulse { 0%, 100% { opacity: 0.25; transform: scale(1); } 50% { opacity: 0.6; transform: scale(1.6); } }
+
+/* DEMO_MODE watermark (invariant: demo data is always visibly marked) */
+.demo-watermark {
+  position: fixed; inset: 0; display: grid; place-items: center; pointer-events: none; z-index: 90;
+  font-size: 12vw; font-weight: 800; color: rgba(240, 87, 122, 0.08); transform: rotate(-18deg); letter-spacing: 0.1em;
+}

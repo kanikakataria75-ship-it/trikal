@@ -319,3 +319,181 @@ def _sector_peers(self: PitReader, sector: str, as_of: AsOf, limit: int = 400) -
 PitReader.profile = _profile  # type: ignore[attr-defined]
 PitReader.last_price = _last_price  # type: ignore[attr-defined]
 PitReader.sector_peers = _sector_peers  # type: ignore[attr-defined]
+
+
+# ----------------------------------------------------------------------------------------------
+# Read views for the terminal UI (M3). Same rule as everything above: nothing known after as_of.
+
+def open_reader(read_only: bool = True) -> PitReader:
+    """A reader on the canonical database. The API layer uses this instead of touching trikal_core.db."""
+    from trikal_core.db import connect
+
+    return PitReader(connect(read_only=read_only))
+
+
+def _search(self: PitReader, q: str, as_of: AsOf, limit: int = 20) -> list[dict]:
+    """Securities whose code, ISIN or name matches `q`, listed on or before the as-of date, including
+    delisted and renamed ones. A security that stopped trading more than 10 days before as_of is marked
+    inactive. The display name is the security's latest known name (a label only, never used in a computation)."""
+    d = as_of.date_ist
+    s = q.strip().upper()
+    if not s:
+        return []
+    like = f"%{s}%"
+    rows = self.con.execute(
+        """WITH l AS (
+               SELECT security_id, exchange, code, valid_from, least(valid_to, ?::DATE) AS valid_to
+               FROM listing WHERE valid_from <= ?),
+           cand AS (
+               SELECT l.security_id, l.exchange, l.code, l.valid_from, l.valid_to, s.latest_name, s.latest_isin,
+                      CASE WHEN l.code = ? OR s.latest_isin = ? THEN 0 WHEN l.code LIKE ? THEN 1
+                           WHEN upper(s.latest_name) LIKE ? THEN 2 ELSE 3 END AS score
+               FROM l JOIN security s USING (security_id)
+               WHERE l.code LIKE ? OR upper(s.latest_name) LIKE ? OR s.latest_isin = ?)
+           SELECT security_id, exchange, code, valid_from, valid_to, latest_name, latest_isin, score
+           FROM cand
+           QUALIFY row_number() OVER (PARTITION BY security_id ORDER BY score, (exchange = 'NSE') DESC, valid_to DESC) = 1
+           ORDER BY score, valid_to DESC, code LIMIT ?""",
+        [d, d, s, s, s + "%", s + "%", like, like, s, limit]).fetchall()
+    out = []
+    for sid, ex, code, vf, vt, name, isin, _ in rows:
+        first = self.con.execute("SELECT min(valid_from) FROM listing WHERE security_id = ?", [sid]).fetchone()[0]
+        out.append({"security_id": sid, "exchange": ex, "code": code, "name": self.display_name(sid, name, ex, code),
+                    "isin": isin, "listed_from": first, "last_trade": vt, "active": (d - vt).days <= 10})
+    return out
+
+
+def _is_id_like(s: str | None) -> bool:
+    return not s or s.startswith(("S:", "X:"))
+
+
+def _display_name(self: PitReader, security_id: str, name: str | None = None, exchange: str | None = None,
+                  code: str | None = None) -> str:
+    """A human label for a security. Securities built from pre-2011 files may have no recorded company
+    name; then the name printed in the exchange's own price file is used, else the trading code."""
+    if not _is_id_like(name):
+        return name  # type: ignore[return-value]
+    if exchange is None or code is None:
+        row = self.con.execute("""SELECT exchange, code FROM listing WHERE security_id = ?
+                                  ORDER BY (exchange = 'NSE') DESC, valid_to DESC LIMIT 1""", [security_id]).fetchone()
+        if not row:
+            return security_id
+        exchange, code = row
+    row = self.con.execute("""SELECT name FROM price_eod WHERE exchange = ? AND code = ? AND name IS NOT NULL
+                              ORDER BY trade_date DESC LIMIT 1""", [exchange, code]).fetchone()
+    return row[0] if row and row[0] else code
+
+
+def _timeline(self: PitReader, security_id: str, as_of: AsOf) -> list[dict]:
+    """Events for the Time Spine, each with the moment it became public (known_at <= as_of)."""
+    ev: list[dict] = []
+    for ex_date, factor, kind, subject, ka in self.con.execute(
+            """SELECT ex_date, factor, parsed_kind, subject, known_at FROM adj_event
+               WHERE security_id = ? AND applied AND known_at <= ? AND ex_date <= ?
+               QUALIFY row_number() OVER (PARTITION BY ex_date ORDER BY (exchange = 'NSE') DESC) = 1
+               ORDER BY ex_date""",
+            [security_id, as_of.ts, as_of.date_ist]).fetchall():
+        ev.append({"type": "corporate_action", "date": ex_date, "known_at": ka,
+                   "label": (kind or "adjustment").replace("_", " "), "detail": subject, "factor": factor})
+    for pe, label, fam, ka, kind in self.con.execute(
+            """SELECT period_end, any_value(period_label), any_value(family), min(known_at), any_value(kind) FROM filing
+               WHERE security_id = ? AND kind LIKE 'results%' AND known_at <= ? GROUP BY period_end ORDER BY 4""",
+            [security_id, as_of.ts]).fetchall():
+        ev.append({"type": "results", "date": ka.date(), "known_at": ka, "label": f"results {pe:%b-%Y}",
+                   "detail": f"{label or ''} · {fam or ''}".strip(" ·"), "period_end": pe})
+    for code, vf, vt, ka, conf in self.con.execute(
+            """SELECT index_code, valid_from, valid_to, known_at, confidence FROM index_membership
+               WHERE security_id = ? AND known_at <= ?
+               QUALIFY row_number() OVER (PARTITION BY index_code, valid_from ORDER BY known_at DESC) = 1""",
+            [security_id, as_of.ts]).fetchall():
+        if vf <= as_of.date_ist:
+            ev.append({"type": "index_in", "date": vf, "known_at": ka, "label": f"joins {code}",
+                       "detail": f"membership confidence {conf}"})
+        if vt <= as_of.date_ist:
+            ev.append({"type": "index_out", "date": vt, "known_at": ka, "label": f"leaves {code}",
+                       "detail": f"membership confidence {conf}"})
+    return sorted(ev, key=lambda e: e["date"])
+
+
+def _index_strata(self: PitReader, index_code: str, as_of: AsOf, dates: list[dt.date]) -> list[dict]:
+    """For each date: the members then (as known at as_of), and how many of them still traded at as_of.
+    'gone' is exactly what a survivorship-biased dataset silently drops."""
+    out = []
+    d_now = as_of.date_ist
+    for d in dates:
+        if d > d_now:
+            continue
+        n, alive = self.con.execute(
+            """WITH known AS (
+                   SELECT * FROM index_membership WHERE index_code = ? AND known_at <= ?
+                   QUALIFY row_number() OVER (PARTITION BY security_id, valid_from ORDER BY known_at DESC) = 1),
+               m AS (SELECT DISTINCT security_id FROM known WHERE valid_from <= ? AND ? < valid_to)
+               SELECT count(*),
+                      count(*) FILTER (WHERE EXISTS (SELECT 1 FROM listing l WHERE l.security_id = m.security_id
+                                                     AND l.valid_from <= ? AND l.valid_to >= ?::DATE - INTERVAL 15 DAY))
+               FROM m""",
+            [index_code, as_of.ts, d, d, d_now, d_now]).fetchone()
+        out.append({"date": d, "members": n, "still_trading": alive, "gone": n - alive})
+    return out
+
+
+def _gone_members(self: PitReader, index_code: str, on: dt.date, as_of: AsOf, limit: int = 40) -> list[dict]:
+    """Members on `on` that no longer traded at as_of: the names survivorship bias erases."""
+    d_now = as_of.date_ist
+    rows = self.con.execute(
+        """WITH known AS (
+               SELECT * FROM index_membership WHERE index_code = ? AND known_at <= ?
+               QUALIFY row_number() OVER (PARTITION BY security_id, valid_from ORDER BY known_at DESC) = 1),
+           m AS (SELECT DISTINCT security_id, symbol FROM known WHERE valid_from <= ? AND ? < valid_to)
+           SELECT m.security_id, any_value(m.symbol), any_value(s.latest_name), max(least(l.valid_to, ?::DATE)) AS last_trade
+           FROM m JOIN security s USING (security_id) JOIN listing l USING (security_id)
+           WHERE l.valid_from <= ?
+           GROUP BY m.security_id HAVING max(least(l.valid_to, ?::DATE)) < ?::DATE - INTERVAL 15 DAY
+           ORDER BY last_trade LIMIT ?""",
+        [index_code, as_of.ts, on, on, d_now, d_now, d_now, d_now, limit]).fetchall()
+    # old press releases list company names in the symbol column; prefer a recorded name, else that text
+    return [{"security_id": r[0], "symbol": r[1],
+             "name": r[2] if not _is_id_like(r[2]) else (r[1] if r[1] and " " in r[1] else self.display_name(r[0])),
+             "last_trade": r[3]} for r in rows]
+
+
+def _watermark(self: PitReader, as_of: AsOf) -> dict:
+    """The newest data a screen can be showing at as_of: last price session and last filing known."""
+    p = self.con.execute("SELECT max(trade_date), max(known_at) FROM price_eod WHERE exchange = 'NSE' AND known_at <= ?",
+                         [as_of.ts]).fetchone()
+    f = self.con.execute("SELECT max(known_at) FROM filing WHERE known_at <= ?", [as_of.ts]).fetchone()
+    return {"last_session": p[0], "prices_known_at": p[1], "last_filing_known_at": f[0]}
+
+
+def _stats(self: PitReader, as_of: AsOf) -> dict:
+    """Headline counts of what the database holds, as known at as_of."""
+    d = as_of.date_ist
+
+    def q(sql: str, *a):
+        return self.con.execute(sql, list(a)).fetchone()
+
+    prices = q("SELECT count(*), min(trade_date), count(DISTINCT trade_date) FROM price_eod WHERE known_at <= ?", as_of.ts)
+    secs = q("""SELECT count(DISTINCT security_id) FROM listing WHERE valid_from <= ?""", d)
+    alive = q("""SELECT count(DISTINCT security_id) FROM listing WHERE valid_from <= ? AND valid_to >= ?::DATE - INTERVAL 15 DAY""", d, d)
+    adj = q("SELECT count(*) FROM adj_event WHERE applied AND known_at <= ?", as_of.ts)
+    ca = q("SELECT count(*) FROM corp_action WHERE known_at <= ?", as_of.ts)
+    ever = q("""SELECT count(DISTINCT security_id) FROM index_membership
+                WHERE index_code = 'NIFTY500' AND known_at <= ? AND valid_from <= ?""", as_of.ts, d)
+    fil = q("SELECT count(*), count(DISTINCT security_id) FROM filing WHERE known_at <= ?", as_of.ts)
+    facts = q("SELECT count(*) FROM fact_financial WHERE known_at <= ?", as_of.ts)
+    shp = q("SELECT count(DISTINCT filing_id) FROM shareholding WHERE known_at <= ?", as_of.ts)
+    pr = q("SELECT count(*) FROM press_release WHERE published_date <= ?", d)
+    return {"price_rows": prices[0], "first_session": prices[1], "sessions": prices[2],
+            "securities": secs[0], "securities_inactive": secs[0] - alive[0], "adjustments_applied": adj[0],
+            "corporate_announcements": ca[0], "nifty500_ever_members": ever[0], "filings": fil[0],
+            "companies_with_filings": fil[1], "financial_facts": facts[0], "shareholding_filings": shp[0],
+            "index_press_releases": pr[0]}
+
+
+PitReader.search = _search  # type: ignore[attr-defined]
+PitReader.display_name = _display_name  # type: ignore[attr-defined]
+PitReader.timeline = _timeline  # type: ignore[attr-defined]
+PitReader.index_strata = _index_strata  # type: ignore[attr-defined]
+PitReader.gone_members = _gone_members  # type: ignore[attr-defined]
+PitReader.watermark = _watermark  # type: ignore[attr-defined]
+PitReader.stats = _stats  # type: ignore[attr-defined]

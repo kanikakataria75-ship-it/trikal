@@ -21,3 +21,5 @@ secrets/
 .hypothesis/
 .ruff_cache/
 *.egg-info/
+web/.next/
+data/cache/
