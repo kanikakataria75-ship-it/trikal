@@ -416,24 +416,28 @@ def _timeline(self: PitReader, security_id: str, as_of: AsOf) -> list[dict]:
 
 
 def _index_strata(self: PitReader, index_code: str, as_of: AsOf, dates: list[dt.date]) -> list[dict]:
-    """For each date: the members then (as known at as_of), and how many of them still traded at as_of.
-    'gone' is exactly what a survivorship-biased dataset silently drops."""
+    """For each date: the members then (as known at as_of), how many still traded at as_of, how many have
+    vanished ('gone': what a survivorship-biased dataset silently drops), and how many old index names were
+    never matched to a security ('unresolved': fate unknown, counted neither way)."""
     out = []
     d_now = as_of.date_ist
     for d in dates:
         if d > d_now:
             continue
-        n, alive = self.con.execute(
+        n_alive_unres = self.con.execute(
             """WITH known AS (
                    SELECT * FROM index_membership WHERE index_code = ? AND known_at <= ?
                    QUALIFY row_number() OVER (PARTITION BY security_id, valid_from ORDER BY known_at DESC) = 1),
                m AS (SELECT DISTINCT security_id FROM known WHERE valid_from <= ? AND ? < valid_to)
                SELECT count(*),
                       count(*) FILTER (WHERE EXISTS (SELECT 1 FROM listing l WHERE l.security_id = m.security_id
-                                                     AND l.valid_from <= ? AND l.valid_to >= ?::DATE - INTERVAL 15 DAY))
+                                                     AND l.valid_from <= ? AND l.valid_to >= ?::DATE - INTERVAL 15 DAY)),
+                      count(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM listing l WHERE l.security_id = m.security_id))
                FROM m""",
             [index_code, as_of.ts, d, d, d_now, d_now]).fetchone()
-        out.append({"date": d, "members": n, "still_trading": alive, "gone": n - alive})
+        n, alive, unresolved = n_alive_unres
+        out.append({"date": d, "members": n, "still_trading": alive, "gone": n - alive - unresolved,
+                    "unresolved": unresolved})
     return out
 
 
@@ -540,6 +544,106 @@ def _still_trading(self: PitReader, security_ids: list[str], ref: AsOf) -> set[s
             AND valid_to >= ?::DATE - INTERVAL 15 DAY""", [*ids, ref.date_ist, ref.date_ist]).fetchall()}
 
 
+def _members_fate(self: PitReader, index_code: str, on: dt.date, ref: AsOf) -> list[dict]:
+    """Every member of `index_code` on `on` (membership as known at ref) with its last trading date up to ref
+    and its fate at ref: alive | gone | unresolved (old index name never matched to a security). A deliberate
+    look back from `ref`; never used inside a computation."""
+    d_ref = ref.date_ist
+    rows = self.con.execute(
+        """WITH known AS (
+               SELECT * FROM index_membership WHERE index_code = ? AND known_at <= ?
+               QUALIFY row_number() OVER (PARTITION BY security_id, valid_from ORDER BY known_at DESC) = 1),
+           m AS (SELECT security_id, any_value(symbol) AS symbol FROM known WHERE valid_from <= ? AND ? < valid_to GROUP BY 1)
+           SELECT m.security_id, m.symbol, any_value(s.latest_name), max(CASE WHEN l.valid_to IS NOT NULL THEN least(l.valid_to, ?::DATE) END) AS last_trade
+           FROM m LEFT JOIN security s USING (security_id) LEFT JOIN listing l ON l.security_id = m.security_id AND l.valid_from <= ?
+           GROUP BY m.security_id, m.symbol ORDER BY last_trade""",
+        [index_code, ref.ts, on, on, d_ref, d_ref]).fetchall()
+    out = []
+    for sid, sym, name, last in rows:
+        # least() skips NULLs, so an unmatched member must be caught explicitly: no listing = fate unknown
+        fate = "unresolved" if last is None else ("alive" if (d_ref - last).days <= 15 else "gone")
+        label = name if not _is_id_like(name) else (sym if sym and (" " in sym or sid.startswith("U:")) else self.display_name(sid))
+        out.append({"security_id": sid, "symbol": sym, "name": label, "last_trade": last, "fate": fate})
+    return out
+
+
+def _session_map(self: PitReader, as_of: AsOf) -> dict | None:
+    """Every Nifty 500 member of the last session known at as_of (before the index history begins in 1998:
+    the 500 most-traded equities of the day), with that day's open/close/previous close, turnover and a sector label (NSE industry, else the legacy press-release label, else None).
+    `comparable` is False on a split/bonus ex-date (previous close not comparable; no change is reported)."""
+    row = self.con.execute("SELECT max(trade_date) FROM price_eod WHERE exchange = 'NSE' AND trade_date <= ? AND known_at <= ?",
+                           [as_of.date_ist, as_of.ts]).fetchone()
+    if not row or not row[0]:
+        return None
+    d = row[0]
+    members = {r[0] for r in self.index_members("NIFTY500", as_of)}
+    # one pass over the day's prints (fast, zone-mapped on trade_date), then keep the members in Python
+    rows = self.con.execute(
+        """SELECT l.security_id, e.code, e.open, e.close, e.prev_close, e.turnover, e.name, e.series,
+                  a.code IS NOT NULL AS ex_day
+           FROM price_eod e
+           JOIN listing l ON l.exchange = 'NSE' AND l.code = e.code AND e.trade_date BETWEEN l.valid_from AND l.valid_to
+           LEFT JOIN (SELECT DISTINCT code FROM adj_event WHERE exchange = 'NSE' AND ex_date = ?) a ON a.code = e.code
+           WHERE e.exchange = 'NSE' AND e.trade_date = ? AND e.known_at <= ? AND e.series IN ('EQ', 'BE') AND e.close > 0""",
+        [d, d, as_of.ts]).fetchall()
+    universe = "nifty500" if members else "all_equities"   # index history starts in 1998
+    best: dict[str, tuple] = {}
+    for row in rows:
+        sid = row[0]
+        if members and sid not in members:
+            continue
+        if sid not in best or (row[7] == "EQ" and best[sid][7] != "EQ"):
+            best[sid] = row
+    picked = list(best.values())
+    if not members:
+        picked = sorted(picked, key=lambda x: -(x[5] or 0))[:500]
+    ids = [x[0] for x in picked]
+    sectors: dict[str, str] = {}
+    if ids:
+        ph = ",".join("?" * len(ids))
+        sectors = {r[0]: r[1] for r in self.con.execute(
+            f"""SELECT security_id, code FROM classification
+                WHERE security_id IN ({ph}) AND valid_from <= ? AND ? < valid_to
+                QUALIFY row_number() OVER (PARTITION BY security_id ORDER BY (scheme = 'NSE_INDUSTRY') DESC, confidence DESC) = 1""",
+            [*ids, d, d]).fetchall()}
+        names = {r[0]: r[1] for r in self.con.execute(
+            f"SELECT security_id, latest_name FROM security WHERE security_id IN ({ph})", ids).fetchall()}
+    else:
+        names = {}
+    tiles = []
+    for sid, code, o, c, p, t, nm, _series, ex_day in picked:
+        ok = bool(p) and not ex_day
+        label = names.get(sid) if not _is_id_like(names.get(sid)) else (nm or code)
+        tiles.append({"security_id": sid, "code": code, "name": label,
+                      "open": o, "close": c, "prev_close": p, "turnover": t or 0.0, "sector": sectors.get(sid),
+                      "change": (c / p - 1) if ok else None, "gap": (o / p - 1) if ok and o else None, "comparable": ok})
+    return {"session": d, "tiles": tiles, "universe": universe, "members_total": len(members) or len(tiles)}
+
+
+def _ew_path(self: PitReader, security_ids: list[str], start: dt.date, end: dt.date, known_by: AsOf) -> list[dict]:
+    """Equal-weight average daily return of a FIXED set of securities (e.g. that day's index members) for
+    every NSE session in [start, end], using prints known by `known_by`. Split/bonus ex-dates are skipped
+    per security. Returns per session: mean return, advances, declines, count."""
+    ids = [s for s in security_ids if s]
+    if not ids:
+        return []
+    ph = ",".join("?" * len(ids))
+    rows = self.con.execute(
+        f"""WITH p AS (
+               SELECT e.trade_date, l.security_id, e.close / e.prev_close - 1 AS r
+               FROM price_eod e JOIN listing l ON l.exchange = 'NSE' AND l.code = e.code AND e.trade_date BETWEEN l.valid_from AND l.valid_to
+               WHERE e.exchange = 'NSE' AND e.series = 'EQ' AND e.trade_date BETWEEN ? AND ? AND e.known_at <= ?
+                 AND e.close > 0 AND e.prev_close > 0 AND l.security_id IN ({ph})
+                 AND NOT EXISTS (SELECT 1 FROM adj_event a WHERE a.exchange = 'NSE' AND a.code = e.code AND a.ex_date = e.trade_date))
+           SELECT trade_date, avg(r), count(*) FILTER (WHERE r > 0.0005), count(*) FILTER (WHERE r < -0.0005), count(*)
+           FROM p GROUP BY 1 ORDER BY 1""",
+        [start, end, known_by.ts, *ids]).fetchall()
+    return [{"d": d, "r": r, "adv": a, "dec": dc, "n": n} for d, r, a, dc, n in rows]
+
+
+PitReader.session_map = _session_map  # type: ignore[attr-defined]
+PitReader.ew_path = _ew_path  # type: ignore[attr-defined]
+PitReader.members_fate = _members_fate  # type: ignore[attr-defined]
 PitReader.market_day = _market_day  # type: ignore[attr-defined]
 PitReader.still_trading = _still_trading  # type: ignore[attr-defined]
 PitReader.search = _search  # type: ignore[attr-defined]

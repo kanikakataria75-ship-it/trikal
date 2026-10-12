@@ -12,6 +12,8 @@ import { Mark, Wordmark } from "@/components/ui/Logo";
 import { LockIcon, Value } from "@/components/ui/Value";
 import TimeSpine from "@/components/ui/TimeSpine";
 import type { TipReadout } from "@/components/three/Touchstone";
+import Survivors from "./Survivors";
+import TimeMachine from "./TimeMachine";
 import s from "./home.module.css";
 
 const Touchstone = dynamic(() => import("@/components/three/Touchstone"), { ssr: false });
@@ -47,7 +49,7 @@ function Nav() {
     <nav className={s.nav}>
       <Link href="/" className={s.brand}><Wordmark /></Link>
       <div className={s.links}>
-        <a href="#market">Market</a>
+        <a href="#market">Time machine</a>
         <a href="#survivors">Survivorship</a>
         <a href="#law">Sector law</a>
         <a href="#time">Time</a>
@@ -184,170 +186,6 @@ function Head({ n, kicker, title, children }: { n: string; kicker: string; title
         {children && <div className={s.headLede}>{children}</div>}
       </div>
     </motion.header>
-  );
-}
-
-/* ================================================================== market board */
-const DAYS = [
-  { d: "NOW", l: "Last session", sub: "today’s close" },
-  { d: "2020-03-23", l: "COVID low", sub: "the 2020 crash low" },
-  { d: "2016-11-09", l: "Demonetisation", sub: "day after the announcement" },
-  { d: "2008-10-24", l: "Global financial crisis", sub: "the October crash" },
-  { d: "2004-05-17", l: "Election shock", sub: "circuit breakers hit" },
-  { d: "2000-03-01", l: "Dot-com era", sub: "the March 2000 tech boom" },
-];
-
-function MoverTable({ title, rows, tone }: { title: string; rows: Mover[]; tone: "pos" | "neg" }) {
-  const max = Math.max(0.0001, ...rows.map((r) => Math.abs(r.change)));
-  return (
-    <div className={s.movers}>
-      <div className={s.moversHead}>{title}</div>
-      {rows.map((r, i) => (
-        <motion.div key={r.code + i} className={s.moverRow} initial={{ opacity: 0, x: tone === "pos" ? -8 : 8 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.45, delay: i * 0.035, ease }}>
-          <Link href={`/terminal?code=${encodeURIComponent(r.code)}`} className={s.moverCode}>
-            {r.code}{r.trades_today === false && <sup title="No longer trades today (hindsight)">†</sup>}
-          </Link>
-          <span className={s.moverName}>{r.name}</span>
-          <span className="mono">{r.close.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</span>
-          <span className={s.moverBar}><i className={tone} style={{ width: `${(Math.abs(r.change) / max) * 100}%` }} /></span>
-          <b className={`mono ${r.change >= 0 ? "pos" : "neg"}`}>{pct(r.change, 1)}</b>
-        </motion.div>
-      ))}
-    </div>
-  );
-}
-
-function MarketBoard() {
-  const [asOf, setAsOf] = useState("NOW");
-  const [custom, setCustom] = useState("");
-  const { data, isFetching, error } = useMarket(asOf, true);
-  const m = data?.market;
-  const total = m ? m.advances + m.declines + m.unchanged : 1;
-  const wd = m ? WEEKDAY[new Date(m.session + "T00:00:00Z").getUTCDay()] : "";
-  return (
-    <section id="market" className={s.section}>
-      <Head n="§1" kicker="The market, any day" title={<>Rewind the market.<br /><em>Every name that was there.</em></>}>
-        Pick a day. The board is rebuilt from that day’s exchange file only — breadth, turnover and the Nifty 500 members of
-        that date, including companies that no longer exist. Nothing published later leaks in.
-      </Head>
-      <div className={s.board}>
-        <div className={s.days}>
-          {DAYS.map((x) => (
-            <button key={x.d} className={asOf === x.d ? s.dayOn : ""} onClick={() => setAsOf(x.d)}>
-              <span className="mono">{x.d === "NOW" ? "NOW" : dmy(x.d)}</span>
-              <b>{x.l}</b>
-              <i>{x.sub}</i>
-            </button>
-          ))}
-          <form className={s.dayCustom} onSubmit={(e) => { e.preventDefault(); if (/^\d{4}-\d{2}-\d{2}$/.test(custom)) setAsOf(custom); }}>
-            <label>any session since 03-Nov-1994</label>
-            <div><input type="date" min="1994-11-03" max={todayIST()} value={custom} onChange={(e) => setCustom(e.target.value)} /><button type="submit">Go</button></div>
-          </form>
-        </div>
-        <div className={`${s.boardMain} ${isFetching ? s.loading : ""}`}>
-          {error && !m ? <div className={s.boardErr}>Market data unavailable — is the API running?</div> : null}
-          {m && (
-            <>
-              <div className={s.sessionLine}>
-                <div>
-                  <span className={s.small}>SESSION</span>
-                  <AnimatePresence mode="wait">
-                    <motion.div key={m.session} className={`mono ${s.sessionDate}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.35 }}>
-                      {dmy(m.session)} <span>{wd}</span>
-                    </motion.div>
-                  </AnimatePresence>
-                </div>
-                <div className={s.kpis}>
-                  <div><span className={s.small}>Stocks traded</span><b className="mono">{indianGroup(m.securities)}</b></div>
-                  <div><span className={s.small}>Median move</span><b className={`mono ${(m.median_change ?? 0) >= 0 ? "pos" : "neg"}`}>{pct(m.median_change, 2)}</b></div>
-                  <div><span className={s.small}>Nifty 500 · equal weight</span><b className={`mono ${(m.members_eqw_change ?? 0) >= 0 ? "pos" : "neg"}`}>{pct(m.members_eqw_change, 2)}</b></div>
-                  <div><span className={s.small}>Turnover</span><b className="mono">₹{indianGroup(m.turnover / 1e7)} Cr</b></div>
-                </div>
-              </div>
-              <div className={s.breadth}>
-                <motion.i className={s.bAdv} animate={{ flexGrow: m.advances / total }} transition={{ duration: 0.8, ease }} />
-                <motion.i className={s.bUnch} animate={{ flexGrow: m.unchanged / total }} transition={{ duration: 0.8, ease }} />
-                <motion.i className={s.bDec} animate={{ flexGrow: m.declines / total }} transition={{ duration: 0.8, ease }} />
-              </div>
-              <div className={s.breadthLbl}>
-                <span className="pos mono">{indianGroup(m.advances)} advanced</span>
-                <span className="mono">{indianGroup(m.unchanged)} unchanged</span>
-                <span className="neg mono">{indianGroup(m.declines)} declined</span>
-              </div>
-              <div className={s.moverGrid} key={m.session}>
-                <MoverTable title={`Top gainers · Nifty 500 members of ${dmy(m.session)}`} rows={m.gainers} tone="pos" />
-                <MoverTable title="Top losers" rows={m.losers} tone="neg" />
-              </div>
-              <div className={s.boardNote}>
-                {m.members_priced} of {m.members_total} members priced that session · stocks with a split/bonus ex-date that day are excluded
-                (their previous close isn’t comparable) · <b>†</b> no longer trades today — hindsight, marked on purpose.
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ================================================================== survivorship */
-function Survivors({ data }: { data?: Showcase }) {
-  const strata = (data?.strata ?? []).filter((x) => x.members > 0);
-  const [hover, setHover] = useState<number | null>(null);
-  const ghosts = data?.ghosts.members ?? [];
-  const y06 = strata.find((x) => x.date.startsWith("2006"));
-  return (
-    <section id="survivors" className={s.section}>
-      <Head n="§2" kicker="Survivorship" title={<>History is written by the survivors.<br /><em>Ours isn’t.</em></>}>
-        Most datasets start from today’s winners and walk backwards; every backtest built on them is flattered by the companies
-        that died on the way. TRIKAL rebuilt Nifty 500 membership from {data ? indianGroup(data.stats.index_press_releases) : "—"} NSE press
-        releases — exactly 500 names on every rebalance since Dec-2011 — and kept every member’s full price history.
-      </Head>
-      <div className={s.survGrid}>
-        <figure className={s.chart}>
-          <figcaption>
-            <b>Nifty 500 members on 30 June of each year</b>
-            <span><i className={s.kAlive} /> still trade today <i className={s.kGone} /> since vanished</span>
-          </figcaption>
-          <div className={s.rows} onMouseLeave={() => setHover(null)}>
-            {strata.map((x, i) => {
-              const alive = x.still_trading / x.members;
-              return (
-                <motion.div key={x.date} className={`${s.row} ${hover === i ? s.rowOn : ""}`} onMouseEnter={() => setHover(i)}
-                  initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ delay: i * 0.02 }}>
-                  <span className="mono">{x.date.slice(0, 4)}</span>
-                  <div className={s.rowBar}>
-                    <motion.i className={s.alive} initial={{ width: 0 }} whileInView={{ width: `${alive * 100}%` }} viewport={{ once: true }} transition={{ duration: 1.1, delay: 0.2 + i * 0.025, ease }} />
-                    <motion.i className={s.gone} initial={{ width: 0 }} whileInView={{ width: `${(1 - alive) * 100}%` }} viewport={{ once: true }} transition={{ duration: 1.1, delay: 0.2 + i * 0.025, ease }} />
-                  </div>
-                  <b className="mono">{x.gone}</b>
-                  <em className="mono">{Math.round((1 - alive) * 100)}%</em>
-                </motion.div>
-              );
-            })}
-          </div>
-          <div className={s.chartFoot}>
-            <span>vanished · count</span><span>share</span>
-          </div>
-        </figure>
-        <aside className={s.survSide}>
-          {y06 && (
-            <div className={s.callout}>
-              <b className="display">{y06.gone}</b>
-              <span>of the {y06.members} companies in the Nifty 500 in June 2006 no longer trade. A survivorship-biased dataset has never heard of them.</span>
-            </div>
-          )}
-          <div className={s.ghostHead}>In the index on {data ? dmy(data.ghosts.on) : "—"} — gone since</div>
-          <div className={s.ghostList}>
-            {ghosts.slice(0, 22).map((g) => (
-              <div key={g.security_id} className={s.ghostRow}>
-                <span>{g.name}</span><i className="mono">{dmy(g.last_trade)}</i>
-              </div>
-            ))}
-          </div>
-        </aside>
-      </div>
-    </section>
   );
 }
 
@@ -502,8 +340,8 @@ export default function Home() {
       <Nav />
       <Tape />
       <Hero data={data} offline={isError} />
-      <MarketBoard />
-      <Survivors data={data} />
+      <TimeMachine />
+      <Survivors data={data} Head={Head} />
       <Law data={data} />
       <Time data={data} />
       <Provenance data={data} />

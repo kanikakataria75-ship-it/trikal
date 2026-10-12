@@ -143,6 +143,92 @@ def market(as_of: str = AS_OF, hindsight: bool = False):
         return ok({"market": m, "hindsight": hindsight}, a)
 
 
+TM_MARQUEE = ["RELIANCE", "TCS", "HDFCBANK", "INFY", "ITC", "SBIN", "HINDUNILVR", "LT"]
+
+
+TM_EVENTS = ["1994-11-03", "1998-05-12", "2000-02-29", "2004-05-17", "2006-05-22", "2008-01-21",
+             "2008-10-24", "2009-05-18", "2013-08-28", "2014-05-16", "2016-06-24", "2016-11-09", "2019-09-20",
+             "2020-03-23", "2021-02-01", "2023-01-27", "2024-06-04"]
+_TM_CACHE: dict = {}
+
+
+def _warm_time_machine() -> None:
+    """Past sessions never change between data refreshes: precompute the built-in event days in the background."""
+    for d in TM_EVENTS:
+        try:
+            _time_machine(asof(d), True)
+        except Exception:
+            pass
+
+
+@app.on_event("startup")
+def _startup() -> None:
+    threading.Thread(target=_warm_time_machine, daemon=True).start()
+
+
+@app.get("/api/timemachine")
+def timemachine(as_of: str = AS_OF, hindsight: bool = False):
+    a = asof(as_of)
+    return ok(_time_machine(a, hindsight), a)
+
+
+def _time_machine(a: AsOf, hindsight: bool, before_days: int = 120) -> dict:
+    """One session, rebuilt for the Time Machine: breadth and movers, every index member as a tile (open/close,
+    turnover, sector), the equal-weight path of those members in the weeks before, marquee prints of the day.
+    hindsight=true adds what happened to the SAME members over the following year — labelled, and computed
+    with today's knowledge on purpose; it is never mixed into the as-of numbers."""
+    key = (a.date_ist, hindsight)
+    if key in _TM_CACHE and a.date_ist < AsOf.now().date_ist:
+        return _TM_CACHE[key]
+    with DB.reader_ctx() as r:
+        m = r.market_day(a)
+        if m is None:
+            raise HTTPException(404, f"no NSE session known as of {a.date_ist}")
+        smap = r.session_map(a)
+        d = m["session"]
+        ids = [t["security_id"] for t in smap["tiles"]]
+        before = r.ew_path(ids, d - dt.timedelta(days=before_days), d, a)
+        marquee = []
+        for code in TM_MARQUEE:
+            sid = r.resolve(code, a, "NSE")
+            lp = r.last_price(sid, a) if sid else None
+            if lp and lp[0] == d:
+                marquee.append({"code": code, "close": lp[1]})
+        out = {"market": m, "map": smap, "before": before, "marquee": marquee, "hindsight": None}
+        if hindsight:
+            now = AsOf.now()
+            after = r.ew_path(ids, d + dt.timedelta(days=1), d + dt.timedelta(days=380), now)[:250]
+            alive = r.still_trading(ids + [x["security_id"] for k in ("gainers", "losers", "most_traded") for x in m[k]], now)
+            for k in ("gainers", "losers", "most_traded"):
+                for x in m[k]:
+                    x["trades_today"] = x["security_id"] in alive
+
+            def cum(n):
+                v = 1.0
+                for x in after[:n]:
+                    v *= 1 + (x["r"] or 0)
+                return v - 1 if after else None
+
+            out["hindsight"] = {"after": after, "m1": cum(21), "m3": cum(63), "y1": cum(250), "sessions": len(after),
+                                "still_trading_today": len(alive & set(ids)), "members": len(ids),
+                                "note": "computed with today's data; the members are fixed to that day's index"}
+    if len(_TM_CACHE) > 200:
+        _TM_CACHE.clear()
+    _TM_CACHE[key] = out
+    return out
+
+
+@app.get("/api/survivors")
+def survivors(on: dt.date, as_of: str = AS_OF):
+    """Nifty 500 members on `on`, each marked with whether it still trades at as_of (hindsight on purpose)."""
+    a = asof(as_of)
+    if on > a.date_ist:
+        raise HTTPException(422, "`on` must not be after as_of")
+    with DB.reader_ctx() as r:
+        m = r.members_fate("NIFTY500", on, a)
+        return ok({"on": on, "members": m, **{k: sum(1 for x in m if x["fate"] == k) for k in ("alive", "gone", "unresolved")}}, a)
+
+
 # ---- company -------------------------------------------------------------------------------------------------------
 HEADLINE = ["market_cap", "revenue_ttm", "pat_ttm", "ebitda_margin", "net_margin", "roe", "roce", "pe", "pb",
             "ev_ebitda", "debt_to_equity", "revenue_growth", "profit_growth"]

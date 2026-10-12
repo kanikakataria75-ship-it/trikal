@@ -79,3 +79,21 @@ def test_market_day_uses_only_that_session_and_skips_ex_dates(con):
     assert m["session"] == d1
     assert m["securities"] == 2 and m["advances"] == 1 and m["declines"] == 1
     assert d0 < m["session"] < d2
+
+
+def test_unmatched_index_member_is_unresolved_not_alive(con):
+    """least() skips NULLs: a member with no listing must not come out as 'still trading' (regression)."""
+    r = PitReader(con)
+    ka = dt.datetime(2006, 6, 1, tzinfo=dt.timezone.utc)
+    insert_many(con, "INSERT INTO index_membership VALUES (?,?,?,?,?,?,?,?,?)",
+                [("NIFTY500", "U:old_name", "Old Name Ltd.", D(2005, 1, 1), D(9999, 12, 31), ka, "press_release", 0.5, ""),
+                 ("NIFTY500", "S:LIVE", "LIVE", D(2005, 1, 1), D(9999, 12, 31), ka, "press_release", 1.0, ""),
+                 ("NIFTY500", "S:DEAD", "DEAD", D(2005, 1, 1), D(2009, 1, 1), ka, "press_release", 1.0, "")])
+    insert_many(con, "INSERT INTO listing VALUES (?,?,?,?,?,?,?)",
+                [("S:LIVE", "NSE", "LIVE", D(2000, 1, 1), D(2026, 1, 1), "isin", 1.0),
+                 ("S:DEAD", "NSE", "DEAD", D(2000, 1, 1), D(2010, 5, 5), "isin", 1.0)])
+    ref = AsOf.end_of(D(2026, 1, 2))
+    fate = {x["security_id"]: x["fate"] for x in r.members_fate("NIFTY500", D(2006, 6, 30), ref)}
+    assert fate == {"U:old_name": "unresolved", "S:LIVE": "alive", "S:DEAD": "gone"}
+    st = r.index_strata("NIFTY500", ref, [D(2006, 6, 30)])[0]
+    assert (st["members"], st["still_trading"], st["gone"], st["unresolved"]) == (3, 1, 1, 1)

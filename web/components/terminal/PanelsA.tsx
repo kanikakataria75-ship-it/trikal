@@ -120,6 +120,21 @@ export function DES({ params }: PanelProps) {
 }
 
 /* ------------------------------------------------------------------ GP */
+/* "Bonus 1:1" / "Split 1:5" from the applied factor (prices before the ex-date are multiplied by it). */
+function ratio(r: number): string {
+  for (let b = 1; b <= 20; b++) { const a = r * b; if (Math.abs(a - Math.round(a)) < 0.02 && Math.round(a) > 0) return `${Math.round(a)}:${b}`; }
+  return `×${r.toFixed(2)}`;
+}
+export function adjLabel(kind: string | null, f: number): { short: string; long: string } {
+  const k = (kind ?? "").toLowerCase();
+  const mult = 1 / f;
+  if (k.startsWith("split") && !k.includes("bonus")) return { short: `SPLIT 1:${Math.round(mult)}`, long: `Split 1:${Math.round(mult)}` };
+  if (k.startsWith("bonus") && !k.includes("split")) return { short: `BONUS ${ratio(mult - 1)}`, long: `Bonus ${ratio(mult - 1)}` };
+  if (k.includes("split") && k.includes("bonus")) return { short: `SPLIT+BONUS ×${mult.toFixed(1)}`, long: `Split + bonus (×${mult.toFixed(1)} shares)` };
+  if (k.startsWith("rights")) return { short: "RIGHTS", long: `Rights issue (price adj ×${f.toFixed(3)})` };
+  return { short: k.toUpperCase() || "ADJ", long: `${k || "adjustment"} ×${f.toFixed(3)}` };
+}
+
 export function GP({ params }: PanelProps) {
   const code = useT((s) => s.code);
   const asOf = usePanelAsOf(params.pin);
@@ -130,6 +145,13 @@ export function GP({ params }: PanelProps) {
   const el = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const [hover, setHover] = useState<{ t: string; c: number; f: number } | null>(null);
+  const [lines, setLines] = useState<{ x: number; date: string; short: string; long: string }[]>([]);
+  const zoomTo = (date: string) => {
+    const c = chartRef.current;
+    if (!c) return;
+    const t = Date.parse(date);
+    c.timeScale().setVisibleRange({ from: ((t - 400 * 864e5) / 1000) as UTCTimestamp, to: ((t + 400 * 864e5) / 1000) as UTCTimestamp });
+  };
 
   useEffect(() => {
     const d = q.data;
@@ -139,7 +161,7 @@ export function GP({ params }: PanelProps) {
       layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: "#6B7079", fontFamily: "JetBrains Mono, monospace", fontSize: 10, attributionLogo: false },
       grid: { vertLines: { color: "rgba(38,43,51,0.35)" }, horzLines: { color: "rgba(38,43,51,0.35)" } },
       rightPriceScale: { borderColor: "#262B33", mode: log === "log" ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal },
-      timeScale: { borderColor: "#262B33", rightOffset: 4 },
+      timeScale: { borderColor: "#262B33", rightOffset: 4, minBarSpacing: 0.02 }, // fit 30 years of daily bars
       crosshair: { mode: CrosshairMode.Normal, vertLine: { color: "#8C6F1E", labelBackgroundColor: "#8C6F1E" }, horzLine: { color: "#8C6F1E", labelBackgroundColor: "#8C6F1E" } },
     });
     chartRef.current = chart;
@@ -154,10 +176,28 @@ export function GP({ params }: PanelProps) {
     vol.priceScale().applyOptions({ scaleMargins: { top: 0.84, bottom: 0 } });
     vol.setData(b.t.map((t, i) => ({ time: time(t), value: b.v[i] ?? 0 })));
     const days = new Set(b.t);
-    createSeriesMarkers(main, d.adjustments.filter((a) => a.applied && days.has(a.ex_date)).map((a) => ({
-      time: time(a.ex_date), position: "aboveBar" as const, shape: "circle" as const, color: "#F2D27A", text: (a.kind ?? "adj").replace("_", " "),
+    const applied = d.adjustments.filter((a) => a.applied && days.has(a.ex_date));
+    createSeriesMarkers(main, applied.map((a) => ({
+      time: time(a.ex_date), position: "aboveBar" as const, shape: "arrowDown" as const, color: "#F2D27A", text: adjLabel(a.kind, a.factor).short,
     })));
     chart.timeScale().fitContent();
+    // gold verticals through every applied split/bonus, re-placed whenever the visible range or size changes
+    const place = () => {
+      const ts = chart.timeScale();
+      const out: { x: number; date: string; short: string; long: string }[] = [];
+      for (const a of applied) {
+        const x = ts.timeToCoordinate(time(a.ex_date));
+        if (x !== null) out.push({ x: x as number, date: a.ex_date, ...adjLabel(a.kind, a.factor) });
+      }
+      setLines(out);
+    };
+    chart.timeScale().subscribeVisibleTimeRangeChange(place);
+    let fitted = false; // autoSize gives the chart its width a frame late: fit once the real width is known
+    chart.timeScale().subscribeSizeChange((w) => {
+      if (!fitted && w > 0) { fitted = true; chart.timeScale().fitContent(); }
+      place();
+    });
+    requestAnimationFrame(place);
     chart.subscribeCrosshairMove((p) => {
       if (!p.time) { setHover(null); return; }
       const iso = new Date((p.time as number) * 1000).toISOString().slice(0, 10);
@@ -188,7 +228,30 @@ export function GP({ params }: PanelProps) {
         </div>
       </div>
       <PanelState q={q} empty={q.data && !q.data.bars.t.length ? "No price prints known for this as-of." : undefined}>
-        {() => <div ref={el} className="gp-chart" />}
+        {() => (
+          <>
+            {q.data!.adjustments.some((a) => a.applied) && (
+              <div className="gp-events">
+                <span className="t-k">Splits &amp; bonuses</span>
+                {q.data!.adjustments.filter((a) => a.applied).map((a) => (
+                  <button key={a.ex_date} onClick={() => zoomTo(a.ex_date)} title={`${a.subject ?? ""} · price before this date ×${a.factor.toFixed(4)} in the adjusted series`}>
+                    <i />{dmy(a.ex_date)} <b>{adjLabel(a.kind, a.factor).long}</b>
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="gp-wrap">
+              <div ref={el} className="gp-chart" />
+              <div className="gp-lines" aria-hidden>
+                {lines.map((l) => (
+                  <div key={l.date} className="gp-line" style={{ left: l.x }}>
+                    <span>{l.short}<em>{l.date.slice(0, 4)}</em></span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
       </PanelState>
       {q.data && <div className="t-foot">{q.data.source} · {indianGroup(q.data.bars.t.length)} sessions · {q.data.adjustments.filter((a) => a.applied).length} adjustments applied</div>}
     </div>

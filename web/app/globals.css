@@ -118,3 +118,7 @@ button { font: inherit; color: inherit; }
   position: fixed; inset: 0; display: grid; place-items: center; pointer-events: none; z-index: 90;
   font-size: 12vw; font-weight: 800; color: rgba(240, 87, 122, 0.08); transform: rotate(-18deg); letter-spacing: 0.1em;
 }
+
+/* Time Machine: district labels drawn on the city floor */
+.city-district { white-space: nowrap; pointer-events: none; display: flex; gap: 6px; align-items: baseline; font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: rgba(242, 210, 122, 0.78); text-shadow: 0 1px 8px #000, 0 0 2px #000; }
+.city-district b { font-family: var(--font-mono); font-weight: 500; letter-spacing: 0; font-size: 9.5px; }

@@ -53,7 +53,7 @@ export type ValuationMethods = Envelope & { security_id: string; playbook: strin
 export type Streak = { code: string; name: string; security_id: string; from: string; to: string; sessions: number; first: number; last: number; t: string[]; c: number[]; source: string };
 export type Showcase = Envelope & {
   disclaimer: string; stats: Stats; watermark: Watermark;
-  strata: { date: string; members: number; still_trading: number; gone: number }[];
+  strata: { date: string; members: number; still_trading: number; gone: number; unresolved: number }[];
   ghosts: { on: string; members: { security_id: string; symbol: string; name: string; last_trade: string }[] };
   streaks: Streak[];
   rules: { code: string; name: string; playbook: string; label: string; metrics: Record<string, MetricResult> }[];
@@ -66,6 +66,9 @@ export type MarketDay = {
   gainers: Mover[]; losers: Mover[]; most_traded: Mover[];
 };
 export type Market = Envelope & { market: MarketDay; hindsight: boolean };
+
+export type Fate = { security_id: string; symbol: string; name: string; last_trade: string | null; fate: "alive" | "gone" | "unresolved" };
+export type Survivors = Envelope & { on: string; members: Fate[]; alive: number; gone: number; unresolved: number };
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -90,7 +93,9 @@ const q = (asOf: string, extra: Record<string, string | number | boolean | undef
 export const useMeta = (asOf: string) => useQuery({ queryKey: ["meta", asOf], queryFn: () => api<Meta>(`/api/meta?${q(asOf)}`) });
 export const useMarket = (asOf: string, hindsight = false) =>
   useQuery({ queryKey: ["market", asOf, hindsight], queryFn: () => api<Market>(`/api/market?${q(asOf, { hindsight })}`), placeholderData: (p) => p });
-export const useShowcase =() => useQuery({ queryKey: ["showcase"], queryFn: () => api<Showcase>(`/api/showcase?${q("NOW")}`), staleTime: Infinity });
+export const useSurvivors = (on: string) =>
+  useQuery({ queryKey: ["survivors", on], queryFn: () => api<Survivors>(`/api/survivors?${q("NOW", { on })}`), staleTime: Infinity, placeholderData: (p) => p });
+export const useShowcase = () =>useQuery({ queryKey: ["showcase"], queryFn: () => api<Showcase>(`/api/showcase?${q("NOW")}`), staleTime: Infinity });
 export const useSearch = (term: string, asOf: string) =>
   useQuery({ queryKey: ["search", term, asOf], queryFn: () => api<{ results: SearchHit[] }>(`/api/search?${q(asOf, { q: term })}`), enabled: term.trim().length > 0 });
 
