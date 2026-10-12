@@ -70,6 +70,10 @@ export type Market = Envelope & { market: MarketDay; hindsight: boolean };
 export type Fate = { security_id: string; symbol: string; name: string; last_trade: string | null; fate: "alive" | "gone" | "unresolved" };
 export type Survivors = Envelope & { on: string; members: Fate[]; alive: number; gone: number; unresolved: number };
 
+export type MacroLatest = { series_id: string; period_end: string; value: number; known_at: string; precision: "vintage" | "imputed"; year_ago: number | null };
+export type MacroSeries = { series_id: string; name: string; unit: string; freq: "D" | "M"; category: string; source: string; known_rule: string; note: string | null; n_obs: number; first_period: string; last_period: string; latest?: MacroLatest | null };
+export type MacroObs = { period_start: string; period_end: string; value: number; known_at: string; precision: "vintage" | "imputed" };
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
@@ -93,6 +97,9 @@ const q = (asOf: string, extra: Record<string, string | number | boolean | undef
 export const useMeta = (asOf: string) => useQuery({ queryKey: ["meta", asOf], queryFn: () => api<Meta>(`/api/meta?${q(asOf)}`) });
 export const useMarket = (asOf: string, hindsight = false) =>
   useQuery({ queryKey: ["market", asOf, hindsight], queryFn: () => api<Market>(`/api/market?${q(asOf, { hindsight })}`), placeholderData: (p) => p });
+export const useMacro = (asOf: string) => useQuery({ queryKey: ["macro", asOf], queryFn: () => api<Envelope & { series: MacroSeries[]; note: string }>(`/api/macro?${q(asOf)}`) });
+export const useMacroSeries = (id: string | null, asOf: string) =>
+  useQuery({ queryKey: ["macro", id, asOf], queryFn: () => api<Envelope & { series: MacroSeries; obs: MacroObs[] }>(`/api/macro/${id}?${q(asOf)}`), enabled: !!id, placeholderData: (p) => p });
 export const useSurvivors = (on: string) =>
   useQuery({ queryKey: ["survivors", on], queryFn: () => api<Survivors>(`/api/survivors?${q("NOW", { on })}`), staleTime: Infinity, placeholderData: (p) => p });
 export const useShowcase = () =>useQuery({ queryKey: ["showcase"], queryFn: () => api<Showcase>(`/api/showcase?${q("NOW")}`), staleTime: Infinity });

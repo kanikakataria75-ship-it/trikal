@@ -155,3 +155,15 @@ Rating actions arrive two ways: (a) agency press releases (CRISIL, ICRA, CARE, I
   (every day from 1994; ~8,700 daily pages, ≈ 2.5 h at the polite rate), `--days 2008-01-01:2008-12-31`.
 - Before public sharing: CC BY-SA requires attribution (shown in the UI) and share-alike for adapted text; we display the text
   unmodified apart from markup removal.
+
+## 12. Macro sources (M5, verified 2026-10-13)
+
+| Source key | Endpoint | Series | Notes |
+|---|---|---|---|
+| `fred.csv` | `https://fred.stlouisfed.org/graph/fredgraph.csv?id=<ID>` | DEXINUS, DCOILBRENTEU, DGS10, DFF, DTWEXBGS, VIXCLS, INDIRLTLT01STM, INDCPIALLMINMEI, IRSTCI01INM156N | Keyless, latest vintage only; rejects browser-like user agents, works with a descriptive one. |
+| `fred.vintage` | `https://api.stlouisfed.org/fred/series/observations?...&realtime_start=1776-07-04&realtime_end=9999-12-31` | same | Needs `FRED_API_KEY` in `.env` (owner). Gives every vintage → exact first-release dates. |
+| `mospi.cpi` | `https://api.mospi.gov.in/api/cpi/getCPIIndex?base_year=2012&series=Current&year=<Y>&state_code=99&sector_code=3` | CPI general, consumer food price (All India, Combined) | eSankhyiki API; ≤ 200 rows/page; host needs legacy TLS renegotiation (scoped to it). 2012 base runs to Dec-2025; the 2024 base (from 2025) uses different codes, not wired yet. |
+| `wb.pinksheet` | `https://thedocs.worldbank.org/.../CMO-Historical-Data-Monthly.xlsx` (link read from `worldbank.org/en/research/commodity-markets` each run) | 17 commodities, monthly since 1960 | The document id changes with every release; an old link silently serves a stale file. |
+
+Not used yet: RBI DBIE (no stable public API), GDELT (unreliable responses during probing), FBIL reference rates.
+`trikal fetch-macro` fetches and loads everything (~150k observations, 3 s load via CSV COPY).

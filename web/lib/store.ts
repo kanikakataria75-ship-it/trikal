@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 
-export type FnCode = "DES" | "GP" | "FA" | "DUP" | "CR" | "RV" | "WC" | "OWN" | "DCF" | "EVT" | "HELP";
+export type FnCode = "DES" | "GP" | "FA" | "DUP" | "CR" | "RV" | "WC" | "OWN" | "DCF" | "EVT" | "MACRO" | "HELP";
 
 type State = {
   asOf: string;                 // "NOW" or YYYY-MM-DD — the global as-of every "follow" panel uses

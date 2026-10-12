@@ -687,6 +687,40 @@ def _context(self: PitReader, day: dt.date, before_days: int = 3) -> dict:
     return {"world": [x for x in items if x["scope"] == "world"], "india": [x for x in items if x["scope"] == "india"]}
 
 
+def _macro_series(self: PitReader) -> list[dict]:
+    keys = ["series_id", "name", "unit", "freq", "category", "source", "known_rule", "note", "n_obs", "first_period", "last_period"]
+    return [dict(zip(keys, r)) for r in self.con.execute(f"SELECT {', '.join(keys)} FROM macro_series ORDER BY category, name").fetchall()]
+
+
+def _macro(self: PitReader, series_id: str, as_of: AsOf, start: dt.date | None = None) -> list[dict]:
+    """Observations of a macro series as known at as_of: for every period the latest value whose known_at <= as_of
+    (later revisions invisible). Each row says whether its known_at is a source vintage or an imputed rule."""
+    rows = self.con.execute(
+        """SELECT period_start, period_end, value, known_at, known_precision FROM macro_obs
+           WHERE series_id = ? AND known_at <= ? AND period_end >= ?
+           QUALIFY row_number() OVER (PARTITION BY period_start ORDER BY known_at DESC) = 1
+           ORDER BY period_start""",
+        [series_id, as_of.ts, start or dt.date(1900, 1, 1)]).fetchall()
+    return [{"period_start": a, "period_end": b, "value": v, "known_at": k, "precision": p} for a, b, v, k, p in rows]
+
+
+def _macro_latest(self: PitReader, as_of: AsOf) -> list[dict]:
+    """The last known value of every series at as_of, with the value a year earlier for context."""
+    rows = self.con.execute(
+        """WITH k AS (
+               SELECT series_id, period_start, period_end, value, known_at, known_precision FROM macro_obs WHERE known_at <= ?
+               QUALIFY row_number() OVER (PARTITION BY series_id, period_start ORDER BY known_at DESC) = 1),
+           last AS (SELECT * FROM k QUALIFY row_number() OVER (PARTITION BY series_id ORDER BY period_start DESC) = 1)
+           SELECT l.series_id, l.period_end, l.value, l.known_at, l.known_precision,
+                  (SELECT y.value FROM k y WHERE y.series_id = l.series_id AND y.period_start <= l.period_start - INTERVAL 365 DAY
+                   ORDER BY y.period_start DESC LIMIT 1) AS year_ago
+           FROM last l""", [as_of.ts]).fetchall()
+    return [{"series_id": s, "period_end": pe, "value": v, "known_at": k, "precision": p, "year_ago": y} for s, pe, v, k, p, y in rows]
+
+
+PitReader.macro_series = _macro_series  # type: ignore[attr-defined]
+PitReader.macro = _macro  # type: ignore[attr-defined]
+PitReader.macro_latest = _macro_latest  # type: ignore[attr-defined]
 PitReader.day_tape = _day_tape  # type: ignore[attr-defined]
 PitReader.context = _context  # type: ignore[attr-defined]
 PitReader.session_map = _session_map  # type: ignore[attr-defined]

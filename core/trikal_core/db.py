@@ -212,6 +212,17 @@ CREATE TABLE IF NOT EXISTS classification (
 );
 
 -- Data-quality issues: anything we could not resolve is recorded, never patched silently.
+-- Macro (M5). Bitemporal like everything else: one row per (series, period, vintage). known_precision is
+-- 'vintage' (source's first-release date) or 'imputed' (conservative registry rule; shown with ≈).
+CREATE TABLE IF NOT EXISTS macro_series (
+    series_id VARCHAR PRIMARY KEY, name VARCHAR, unit VARCHAR, freq VARCHAR, category VARCHAR,
+    source VARCHAR, known_rule VARCHAR, note VARCHAR, n_obs INTEGER, first_period DATE, last_period DATE
+);
+CREATE TABLE IF NOT EXISTS macro_obs (
+    series_id VARCHAR, period_start DATE, period_end DATE, value DOUBLE,
+    known_at TIMESTAMPTZ, known_precision VARCHAR, vintage DATE, source_sha VARCHAR, recorded_at TIMESTAMPTZ
+);
+
 -- Context for a day (Time Machine): editorial summaries from Wikipedia, CC BY-SA 4.0. Never an input to any
 -- computation; no known_at (written after the fact). Lineage: page title + raw sha.
 CREATE TABLE IF NOT EXISTS context_event (

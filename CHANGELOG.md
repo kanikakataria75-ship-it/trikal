@@ -133,3 +133,15 @@ heuristics to review (RISKS R-31); sector operating metrics wait for M5/M6 (R-32
 - 134 tests (19 new in M3).
 
 **Pending** run `trikal adjust` once more (≈ 19 min, API stopped) to apply the narrowed wide band (1 event affected).
+
+## M5: Macro, policy & geopolitics (IN PROGRESS, started 2026-10-13)
+
+**Step 1 — macro data layer (done)**
+- `macro_series` / `macro_obs` (bitemporal, ADR-020), registry `config/macro_series.yaml`, `trikal fetch-macro`.
+- 27 series: USD/INR (1973–), Brent (1987–), US 10Y (1962–), Fed funds, broad dollar, VIX, India 10Y, India interbank,
+  India CPI (OECD 1957–; MOSPI 2013–2025), 17 Pink Sheet commodities (1960–). ~150k observations.
+- `PitReader.macro / macro_latest / macro_series`; API `/api/macro`, `/api/macro/{id}`; terminal `MACRO` desk
+  (tiles by category with y/y and ≈ for imputed release times, full-history chart). Rewind works (24-Oct-2008: INR 49.25, +24.7% y/y).
+- 5 tests (missing ≠ zero, vintages, MOSPI filtering, imputed rules, revisions invisible until released).
+
+**Next:** sector sensitivities (PIT regressions) → Transmission Engine (3D) + `SHOCK` → policy/event calendar → Exposure Theatre.

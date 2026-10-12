@@ -314,3 +314,22 @@
 .gp-line span { position: absolute; top: 6px; left: 4px; white-space: nowrap; font-family: var(--font-mono); font-size: 9.5px; font-weight: 600; letter-spacing: 0.06em; color: #120e04; background: linear-gradient(180deg, #ecd28a, #c9a434); padding: 1px 5px; border-radius: 2px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5); }
 .gp-line span em { font-style: normal; font-weight: 400; margin-left: 5px; opacity: 0.7; }
 .gp-line:nth-child(even) span { top: 26px; }
+
+/* ---------- MACRO desk ---------- */
+.macro .mc { display: grid; grid-template-rows: auto minmax(260px, 1fr); gap: 12px; min-height: 100%; }
+.mc-tiles { display: flex; flex-direction: column; gap: 8px; }
+.mc-group .t-k { margin: 2px 0 5px; }
+.mc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 5px; }
+.mc-tile { display: grid; grid-template-columns: 1fr auto; gap: 1px 8px; text-align: left; padding: 7px 9px; border: 1px solid var(--line); border-radius: 4px; background: #0f1115; cursor: pointer; transition: border-color 0.2s, background 0.2s; }
+.mc-tile:hover { border-color: var(--line-strong); }
+.mc-tile.on { border-color: var(--gold-2); background: rgba(212, 175, 55, 0.06); box-shadow: inset 2px 0 0 var(--gold-1); }
+.mc-name { grid-column: 1 / -1; font-size: 10.5px; color: var(--fg-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mc-tile b { font-size: 15px; font-weight: 500; color: var(--fg-0); }
+.mc-chg { font-size: 10.5px; align-self: center; text-align: right; }
+.mc-tile i { grid-column: 1 / -1; font-style: normal; font-size: 9.5px; color: var(--fg-2); }
+.mc-chart { display: flex; flex-direction: column; border-top: 1px solid var(--line); padding-top: 8px; min-height: 260px; }
+.mc-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+.mc-head b { font-family: var(--font-display); font-weight: 400; font-size: 19px; }
+.mc-head span { font-size: 11px; color: var(--fg-2); }
+.mc-head i { font-style: normal; font-size: 10.5px; color: var(--warn); margin-left: auto; }
+.mc-canvas { flex: 1; min-height: 240px; }

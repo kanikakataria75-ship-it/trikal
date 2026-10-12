@@ -12,11 +12,12 @@ export const FUNCTIONS: Record<FnCode, { label: string; desc: string }> = {
   OWN: { label: "Ownership", desc: "Promoter, institutions, public; pledge" },
   DCF: { label: "Valuation Lab", desc: "Methods the sector allows; assumptions labelled; ranges, never targets" },
   EVT: { label: "Events", desc: "Corporate actions, results, index changes — each with its public time" },
+  MACRO: { label: "Macro desk", desc: "FX, rates, inflation, commodities — every value as known at the as-of" },
   HELP: { label: "Help", desc: "Function codes and keys" },
 };
 
 export const LATER: Record<string, string> = {
-  SEC: "M4/M5 sector desk", MACRO: "M5", POL: "M5", GEO: "M5 Exposure Theatre", TX: "M5 Transmission Engine",
+  SEC: "M4/M5 sector desk", POL: "M5", GEO: "M5 Exposure Theatre", TX: "M5 Transmission Engine",
   SHOCK: "M5", CC: "M6 concalls", KAS: "M7 KASAUTI", NOTE: "M8", RPT: "M8", FRX: "M9 forensics", CAL: "M9", SCRN: "M9 screener",
 };
 

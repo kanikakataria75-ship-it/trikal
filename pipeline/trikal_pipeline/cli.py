@@ -182,6 +182,19 @@ def fetch_context(
     typer.echo(f"loaded: {wiki_context.load(con, raw)}")
 
 
+@app.command("fetch-macro")
+def fetch_macro(only: str = typer.Option("", help="comma-separated series ids (default: all in config/macro_series.yaml)")) -> None:
+    """Fetch macro series (FRED, MOSPI, World Bank Pink Sheet) into the raw zone, then load macro_obs."""
+    from trikal_core.db import connect, init_schema
+    from trikal_pipeline.sources import macro
+
+    raw = RawStore()
+    typer.echo(f"fetched: {macro.fetch(raw, [x for x in only.split(',') if x] or None)}")
+    con = connect()
+    init_schema(con)
+    typer.echo(f"loaded: {macro.load(con, raw)}")
+
+
 @app.command("show")
 def show(
     code: str,

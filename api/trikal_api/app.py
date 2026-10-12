@@ -229,6 +229,26 @@ def _time_machine(a: AsOf, hindsight: bool, before_days: int = 120) -> dict:
     return out
 
 
+@app.get("/api/macro")
+def macro_overview(as_of: str = AS_OF):
+    """Every macro series with its last value known at as_of and the value a year earlier."""
+    a = asof(as_of)
+    with DB.reader_ctx() as r:
+        latest = {x["series_id"]: x for x in r.macro_latest(a)}
+        series = [{**s, "latest": latest.get(s["series_id"])} for s in r.macro_series()]
+        return ok({"series": series, "note": "≈ = imputed release time (conservative registry rule); vintage = source first-release date"}, a)
+
+
+@app.get("/api/macro/{series_id}")
+def macro_series(series_id: str, as_of: str = AS_OF, start: dt.date | None = None):
+    a = asof(as_of)
+    with DB.reader_ctx() as r:
+        meta = next((s for s in r.macro_series() if s["series_id"] == series_id), None)
+        if not meta:
+            raise HTTPException(404, f"unknown macro series {series_id}")
+        return ok({"series": meta, "obs": r.macro(series_id, a, start)}, a)
+
+
 @app.get("/api/survivors")
 def survivors(on: dt.date, as_of: str = AS_OF):
     """Nifty 500 members on `on`, each marked with whether it still trades at as_of (hindsight on purpose)."""
