@@ -165,10 +165,33 @@ def run_overnight(symbols_file: str, since: str = "2011-04-01") -> None:
     _log(f"start: {len(symbols)} symbols (keep-awake requested)")
     _log(f"lists done: {fetch_lists(symbols, fetcher, raw)}")
     _log(f"xbrl done: {fetch_docs(fetcher, raw, dt.date.fromisoformat(since), 'xbrl')}")
+    _refresh()
     _log(f"shp done: {fetch_docs(fetcher, raw, dt.date.fromisoformat(since), 'shp')}")
     _log(f"html done: {fetch_docs(fetcher, raw, dt.date.fromisoformat(since), 'html')}")
+    _refresh()
     _log(f"finished in {(time.monotonic() - t0) / 3600:.1f} h")
     fetcher.close()
+
+
+def _refresh() -> None:
+    """Parse what has arrived and rewrite the coverage report (same as `trikal refresh-m2`)."""
+    import subprocess
+
+    log = data_dir_logs() / "m2_refresh.log"
+    with open(log, "a", encoding="utf-8") as fh:
+        fh.write(f"\n=== refresh {dt.datetime.now():%Y-%m-%d %H:%M:%S} ===\n")
+        fh.flush()
+        r = subprocess.run([sys.executable, "-c", "from trikal_pipeline.cli import app; app(['refresh-m2'])"],
+                           stdout=fh, stderr=subprocess.STDOUT)
+    _log(f"refresh-m2 exit code {r.returncode} (details: data/logs/m2_refresh.log)")
+
+
+def data_dir_logs():
+    from trikal_core.db import data_dir
+
+    p = data_dir() / "logs"
+    p.mkdir(exist_ok=True)
+    return p
 
 
 if __name__ == "__main__":
