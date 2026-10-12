@@ -6,7 +6,7 @@
    drawn onto a polished basalt slab, while the three arcs of time (past / present / future) turn around it. */
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { ContactShadows, Environment, Html, Lightformer, PerformanceMonitor, PresentationControls } from "@react-three/drei";
+import { ContactShadows, Environment, Lightformer, PerformanceMonitor, PresentationControls } from "@react-three/drei";
 import { Bloom, EffectComposer, Noise, ToneMapping, Vignette } from "@react-three/postprocessing";
 import { ToneMappingMode } from "postprocessing";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -282,15 +282,6 @@ function TimeArcs({ reduced }: { reduced: boolean }) {
             </mesh>
           );
         })}
-        <Html position={[Math.cos(0.55 * past) * R, 0.16, -Math.sin(0.55 * past) * R]} center className="arc-label">
-          <span className="deva">भूत</span> BHOOT
-        </Html>
-        <Html position={[Math.cos(presentAngle) * R, 0.2, -Math.sin(presentAngle) * R]} center className="arc-label arc-now">
-          <span className="deva">वर्तमान</span> NOW
-        </Html>
-        <Html position={[Math.cos(past + 0.45 * (2 * Math.PI - past)) * R, 0.16, -Math.sin(past + 0.45 * (2 * Math.PI - past)) * R]} center className="arc-label arc-future">
-          <span className="deva">भविष्य</span> BHAVISHYA
-        </Html>
       </group>
     </group>
   );

@@ -97,7 +97,12 @@ function DNode({ title, sub, r, x, y, root }: { title: string; sub: string; r?: 
   return (
     <div className={`dup-node ${root ? "root" : ""} ${r?.state === "value" ? "ok" : ""}`} style={{ left: `${x}%`, top: y }}>
       <div className="dup-t">{title}</div>
-      <div className="dup-v">{r ? (("metric" in r) ? <Value r={r as MetricResult} /> : <span className="v">{(r as { value: number }).value.toFixed(2)}×</span>) : <span className="v v-muted">…</span>}</div>
+      <div className="dup-v">
+        {!r ? <span className="v v-muted">…</span>
+          : "metric" in r ? <Value r={r as MetricResult} />
+            : r.state === "value" ? <span className="v">{(r as { value: number }).value.toFixed(2)}×</span>
+              : <Value r={{ ...(r as object), metric: title } as MetricResult} />}
+      </div>
       <div className="dup-s">{sub}</div>
     </div>
   );

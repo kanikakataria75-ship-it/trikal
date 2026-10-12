@@ -125,6 +125,24 @@ def search(q: str, as_of: str = AS_OF, limit: int = 15):
         return ok({"results": r.search(q, a, limit)}, a)
 
 
+@app.get("/api/market")
+def market(as_of: str = AS_OF, hindsight: bool = False):
+    """The last session known at as_of. With hindsight=true each name is also marked with whether it still
+    trades TODAY — an explicit, labelled look back from the present (home page), never used in a computation."""
+    a = asof(as_of)
+    with DB.reader_ctx() as r:
+        m = r.market_day(a)
+        if m is None:
+            raise HTTPException(404, f"no NSE session known as of {a.date_ist}")
+        if hindsight:
+            ids = [x["security_id"] for k in ("gainers", "losers", "most_traded") for x in m[k]]
+            alive = r.still_trading(ids, AsOf.now())
+            for k in ("gainers", "losers", "most_traded"):
+                for x in m[k]:
+                    x["trades_today"] = x["security_id"] in alive
+        return ok({"market": m, "hindsight": hindsight}, a)
+
+
 # ---- company -------------------------------------------------------------------------------------------------------
 HEADLINE = ["market_cap", "revenue_ttm", "pat_ttm", "ebitda_margin", "net_margin", "roe", "roce", "pe", "pb",
             "ev_ebitda", "debt_to_equity", "revenue_growth", "profit_growth"]

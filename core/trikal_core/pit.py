@@ -490,6 +490,58 @@ def _stats(self: PitReader, as_of: AsOf) -> dict:
             "index_press_releases": pr[0]}
 
 
+def _market_day(self: PitReader, as_of: AsOf, movers: int = 8) -> dict | None:
+    """The last NSE session known at as_of: breadth, turnover, and the day's movers among the Nifty 500
+    members of that date. Day change uses the exchange's previous close, so securities with a split/bonus
+    ex-date that session are excluded (their previous close is not comparable)."""
+    row = self.con.execute("SELECT max(trade_date) FROM price_eod WHERE exchange = 'NSE' AND trade_date <= ? AND known_at <= ?",
+                           [as_of.date_ist, as_of.ts]).fetchone()
+    if not row or not row[0]:
+        return None
+    d = row[0]
+    rows = self.con.execute(
+        """SELECT e.code, l.security_id, e.close, e.prev_close, e.turnover, e.name
+           FROM price_eod e LEFT JOIN listing l ON l.exchange = 'NSE' AND l.code = e.code AND e.trade_date BETWEEN l.valid_from AND l.valid_to
+           WHERE e.exchange = 'NSE' AND e.trade_date = ? AND e.series = 'EQ' AND e.known_at <= ? AND e.close > 0 AND e.prev_close > 0
+             AND NOT EXISTS (SELECT 1 FROM adj_event a WHERE a.exchange = 'NSE' AND a.code = e.code AND a.ex_date = e.trade_date)""",
+        [d, as_of.ts]).fetchall()
+    members = {r[0] for r in self.index_members("NIFTY500", as_of)}
+    chg = [(code, sid, c / p - 1, t or 0.0, nm, c) for code, sid, c, p, t, nm in rows]
+    adv = sum(1 for x in chg if x[2] > 0.0005)
+    dec = sum(1 for x in chg if x[2] < -0.0005)
+    mem = [x for x in chg if x[1] in members]
+    srt = sorted(mem, key=lambda x: x[2])
+
+    def item(x):
+        return {"code": x[0], "security_id": x[1], "change": x[2], "turnover": x[3], "close": x[5],
+                "name": self.display_name(x[1], None, "NSE", x[0]) if x[1] else (x[4] or x[0])}
+
+    def median(v):
+        v = sorted(v)
+        return v[len(v) // 2] if v else None
+
+    return {"session": d, "securities": len(chg), "advances": adv, "declines": dec, "unchanged": len(chg) - adv - dec,
+            "median_change": median([x[2] for x in chg]), "turnover": sum(x[3] for x in chg),
+            "members_priced": len(mem), "members_total": len(members),
+            "members_eqw_change": (sum(x[2] for x in mem) / len(mem)) if mem else None,
+            "gainers": [item(x) for x in srt[::-1][:movers]], "losers": [item(x) for x in srt[:movers]],
+            "most_traded": [item(x) for x in sorted(mem, key=lambda x: -x[3])[:movers * 3]]}
+
+
+def _still_trading(self: PitReader, security_ids: list[str], ref: AsOf) -> set[str]:
+    """Which of these securities still traded within 15 days of `ref`. Used only to annotate a past date
+    with hindsight on purpose (e.g. '† no longer trades'), never inside a computation for that date."""
+    ids = [s for s in security_ids if s]
+    if not ids:
+        return set()
+    ph = ",".join("?" * len(ids))
+    return {r[0] for r in self.con.execute(
+        f"""SELECT DISTINCT security_id FROM listing WHERE security_id IN ({ph}) AND valid_from <= ?
+            AND valid_to >= ?::DATE - INTERVAL 15 DAY""", [*ids, ref.date_ist, ref.date_ist]).fetchall()}
+
+
+PitReader.market_day = _market_day  # type: ignore[attr-defined]
+PitReader.still_trading = _still_trading  # type: ignore[attr-defined]
 PitReader.search = _search  # type: ignore[attr-defined]
 PitReader.display_name = _display_name  # type: ignore[attr-defined]
 PitReader.timeline = _timeline  # type: ignore[attr-defined]

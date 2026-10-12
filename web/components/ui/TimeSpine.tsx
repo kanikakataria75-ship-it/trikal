@@ -28,7 +28,7 @@ const iso = (t: number) => new Date(t).toISOString().slice(0, 10);
 
 export default function TimeSpine({ events, start, now, asOf, onChange, height = 64, futureFrac = 0.1, showLabels = true, scenarioNote }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
-  const [w, setW] = useState(900);
+  const [w, setW] = useState(0); // measured on the client; nothing is drawn on the server (avoids float mismatches)
   const [drag, setDrag] = useState<number | null>(null);
   const { tip, show, move, hide } = useTip();
 
@@ -112,7 +112,7 @@ export default function TimeSpine({ events, start, now, asOf, onChange, height =
   return (
     <div ref={wrap} className="spine" style={{ position: "relative", height, userSelect: "none", touchAction: "none" }}
       tabIndex={onChange ? 0 : -1} onKeyDown={onKey} aria-label="Time spine: drag or use arrow keys to set the as-of date">
-      <svg width={w} height={height} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} style={{ display: "block", cursor: onChange ? "ew-resize" : "default" }}>
+      {w > 0 && <svg width={w} height={height} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} style={{ display: "block", cursor: onChange ? "ew-resize" : "default" }}>
         <defs>
           <linearGradient id="sp-past" x1="0" x2="1">
             <stop offset="0" stopColor="#8C6F1E" stopOpacity="0.25" />
@@ -185,7 +185,7 @@ export default function TimeSpine({ events, start, now, asOf, onChange, height =
             </text>
           </g>
         )}
-      </svg>
+      </svg>}
       <TipLayer tip={tip} />
     </div>
   );

@@ -16,6 +16,8 @@ dependencies = [
     "pyyaml>=6",
     "tzdata>=2024.1",  # IANA zones on Windows
     "pytz>=2024.1",  # DuckDB returns TIMESTAMPTZ values through pytz
+    "fastapi>=0.115",  # M3 read API
+    "uvicorn>=0.30",
 ]
 
 [project.optional-dependencies]
@@ -25,8 +27,9 @@ dev = ["pytest>=8", "hypothesis>=6.100"]
 trikal = "trikal_pipeline.cli:app"
 
 [tool.setuptools.packages.find]
-where = ["core", "pipeline", "analytics"]
+where = ["core", "pipeline", "analytics", "api"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["api", "tests"]
 markers = ["network: hits live sources (deselect with -m 'not network')"]

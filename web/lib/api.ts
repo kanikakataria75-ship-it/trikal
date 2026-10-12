@@ -59,6 +59,14 @@ export type Showcase = Envelope & {
   rules: { code: string; name: string; playbook: string; label: string; metrics: Record<string, MetricResult> }[];
 };
 
+export type Mover = { code: string; security_id: string | null; change: number; turnover: number; close: number; name: string; trades_today?: boolean };
+export type MarketDay = {
+  session: string; securities: number; advances: number; declines: number; unchanged: number; median_change: number | null;
+  turnover: number; members_priced: number; members_total: number; members_eqw_change: number | null;
+  gainers: Mover[]; losers: Mover[]; most_traded: Mover[];
+};
+export type Market = Envelope & { market: MarketDay; hindsight: boolean };
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
@@ -80,7 +88,9 @@ const q = (asOf: string, extra: Record<string, string | number | boolean | undef
 };
 
 export const useMeta = (asOf: string) => useQuery({ queryKey: ["meta", asOf], queryFn: () => api<Meta>(`/api/meta?${q(asOf)}`) });
-export const useShowcase = () => useQuery({ queryKey: ["showcase"], queryFn: () => api<Showcase>(`/api/showcase?${q("NOW")}`), staleTime: Infinity });
+export const useMarket = (asOf: string, hindsight = false) =>
+  useQuery({ queryKey: ["market", asOf, hindsight], queryFn: () => api<Market>(`/api/market?${q(asOf, { hindsight })}`), placeholderData: (p) => p });
+export const useShowcase =() => useQuery({ queryKey: ["showcase"], queryFn: () => api<Showcase>(`/api/showcase?${q("NOW")}`), staleTime: Infinity });
 export const useSearch = (term: string, asOf: string) =>
   useQuery({ queryKey: ["search", term, asOf], queryFn: () => api<{ results: SearchHit[] }>(`/api/search?${q(asOf, { q: term })}`), enabled: term.trim().length > 0 });
 
