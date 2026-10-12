@@ -275,3 +275,47 @@ def _classification(self: PitReader, security_id: str, as_of: AsOf, scheme: str 
 PitReader.ownership = _ownership  # type: ignore[attr-defined]
 PitReader.pledge = _pledge  # type: ignore[attr-defined]
 PitReader.classification = _classification  # type: ignore[attr-defined]
+
+
+# ----------------------------------------------------------------------------------------------
+# Helpers for the analytics layer (M4)
+
+def _profile(self: PitReader, security_id: str, as_of: AsOf) -> dict:
+    """Name, sector label (+method/confidence), and the reporting family of the latest filing known at as_of."""
+    name = self.con.execute("SELECT latest_name FROM security WHERE security_id = ?", [security_id]).fetchone()
+    fam = self.con.execute(
+        """SELECT family FROM filing WHERE security_id = ? AND kind LIKE 'results%' AND known_at <= ?
+           ORDER BY period_end DESC, known_at DESC LIMIT 1""", [security_id, as_of.ts]).fetchone()
+    cl = self.classification(security_id, as_of)
+    return {"security_id": security_id, "name": name[0] if name else None,
+            "sector": cl[0] if cl else None, "sector_method": cl[1] if cl else None,
+            "sector_confidence": cl[2] if cl else None, "family": fam[0] if fam else None}
+
+
+def _last_price(self: PitReader, security_id: str, as_of: AsOf, exchange: str = "NSE",
+                max_age_days: int = 10) -> tuple[dt.date, float] | None:
+    """Latest unadjusted close known at as_of, or None if older than max_age_days (stale quotes are not used)."""
+    row = self.con.execute(
+        """SELECT e.trade_date, e.close FROM price_eod e JOIN listing l ON l.exchange = e.exchange AND l.code = e.code
+                  AND e.trade_date BETWEEN l.valid_from AND l.valid_to
+           WHERE l.security_id = ? AND e.exchange = ? AND e.known_at <= ? AND e.close > 0
+           ORDER BY e.trade_date DESC LIMIT 1""", [security_id, exchange, as_of.ts]).fetchone()
+    if not row or (as_of.date_ist - row[0]).days > max_age_days:
+        return None
+    return row[0], row[1]
+
+
+def _sector_peers(self: PitReader, sector: str, as_of: AsOf, limit: int = 400) -> list[str]:
+    """Securities carrying the same sector label at as_of that had published results by then."""
+    d = as_of.date_ist
+    return [r[0] for r in self.con.execute(
+        """SELECT DISTINCT c.security_id FROM classification c
+           WHERE c.scheme = 'NSE_INDUSTRY' AND c.code = ? AND c.valid_from <= ? AND ? < c.valid_to
+             AND EXISTS (SELECT 1 FROM filing f WHERE f.security_id = c.security_id AND f.known_at <= ?
+                         AND f.kind LIKE 'results%')
+           ORDER BY 1 LIMIT ?""", [sector, d, d, as_of.ts, limit]).fetchall()]
+
+
+PitReader.profile = _profile  # type: ignore[attr-defined]
+PitReader.last_price = _last_price  # type: ignore[attr-defined]
+PitReader.sector_peers = _sector_peers  # type: ignore[attr-defined]

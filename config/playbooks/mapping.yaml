@@ -1,0 +1,65 @@
+# How a company is assigned a playbook. Evaluated top to bottom; the first match wins; the result carries how and
+# a confidence. Nothing is silently defaulted: an unmatched company gets `fallback_playbook` with low confidence.
+#
+# Layers:
+#   1. overrides        explicit security_id -> playbook (human-reviewed, cite the reason)
+#   2. refine           regexes on the filing family / company name inside a given NSE sector label
+#   3. sector_defaults  the NSE sector label (22 labels, see classification) -> playbook
+#
+# confidence: override 1.0 | filing family 0.95 | name rule 0.8 | unambiguous sector 0.7 | ambiguous sector 0.5
+version: 1
+
+overrides: {}
+# Example (kept empty until reviewed):
+#   "S:INE002A01": {playbook: oil_gas_omc, overlays: [holdco], reason: "Reliance Industries: O2C + Jio + Retail"}
+
+refine:
+  # by the filing family the company reports in
+  - {when: {family: BANKING}, playbook: banks, confidence: 0.95}
+  - {when: {family: NBFC_INDAS}, playbook: nbfc_hfc, confidence: 0.9}
+  # by name, inside Financial Services (banks first so "Small Finance Bank" is a bank, not an NBFC)
+  - {when: {sector: "Financial Services", name: "(?i)\\bbank\\b"}, playbook: banks, confidence: 0.8}
+  - {when: {sector: "Financial Services", name: "(?i)life insurance|life ins"}, playbook: insurance_life, confidence: 0.8}
+  - {when: {sector: "Financial Services", name: "(?i)insurance|assurance"}, playbook: insurance_general, confidence: 0.8}
+  - {when: {sector: "Financial Services", name: "(?i)asset management|\\bamc\\b|broking|securities|stock exchange|\\bexchange\\b|depositor|registrar|\\bcams\\b|kfin|bse ltd|multi commodity|wealth|angel one|360 one|computer age management|crisil|indian energy exchange|\\bbse limited"}, playbook: capital_markets, confidence: 0.8}
+  - {when: {sector: "Financial Services", name: "(?i)housing finance|finance|capital|leasing|credit|fincorp|financ|housing & urban|housing and urban|\\brec limited|\\birfc\\b|ireda|renewable energy development|\\bhudco\\b"}, playbook: nbfc_hfc, confidence: 0.6}
+  # healthcare
+  - {when: {sector: Healthcare, name: "(?i)hospital|medical sciences|institute of medical|diagnostic|lifecare|medicity|health care services"}, playbook: hospitals, confidence: 0.8}
+  # consumer services
+  - {when: {sector: "Consumer Services", name: "(?i)hotel|resort|leela|lemon tree|chalet|ihcl|taj"}, playbook: hotels, confidence: 0.8}
+  - {when: {sector: Services, name: "(?i)airline|aviation|interglobe|spicejet"}, playbook: aviation, confidence: 0.8}
+  - {when: {sector: Services, name: "(?i)logistics|transport|container|shipping|cargo|\\bports?\\b|express|delhivery|gateway"}, playbook: logistics, confidence: 0.7}
+  # energy
+  - {when: {sector: "Oil Gas & Consumable Fuels", name: "(?i)oil india|oil and natural|oil & natural|\\bongc\\b|hindustan oil|selan|oil and gas|oil & gas"}, playbook: oil_gas_upstream, confidence: 0.8}
+  - {when: {sector: "Oil Gas & Consumable Fuels", name: "(?i)indraprastha|mahanagar|gujarat gas|adani total|gas (limited|ltd)|\\bgail\\b|petronet|gas distribution"}, playbook: oil_gas_cgd, confidence: 0.7}
+  - {when: {sector: Power, name: "(?i)renewable|green|solar|wind|suzlon|waaree|premier energies|inox wind|acme"}, playbook: renewables, confidence: 0.8}
+  # agri-linked
+  - {when: {name: "(?i)fertili[sz]er|chambal|coromandel|rcf|nfl|gsfc|gnfc|sugar|balrampur|triveni|dhampur|upl|pi industries|dhanuka|rallis|bayer crop"}, playbook: agri_fert_sugar, confidence: 0.6}
+  # auto ancillaries versus OEMs
+  - {when: {sector: "Automobile and Auto Components", name: "(?i)forging|casting|components|gears|bearings|brakes|wheels|tyre|tire|battery|bosch|minda|sona|schaeffler|endurance|motherson|sundram|exide|amara|apollo tyres|ceat|mrf|balkrishna|jk tyre|subros|gabriel"}, playbook: auto_ancillary, confidence: 0.7}
+  # holding companies and conglomerates
+  - {when: {name: "(?i)investment(s)? (company|corporation)|holdings? (ltd|limited)|reliance industries|adani enterprises|itc ltd|grasim|bajaj holdings|tata sons"}, playbook: generic_nonfinancial, overlays: [holdco], confidence: 0.4}
+
+sector_defaults:
+  "Automobile and Auto Components": {playbook: auto_oem, confidence: 0.5}
+  "Capital Goods": {playbook: capital_goods_epc_defence, confidence: 0.6}
+  "Chemicals": {playbook: chemicals_specialty, confidence: 0.5}
+  "Construction": {playbook: capital_goods_epc_defence, confidence: 0.7}
+  "Construction Materials": {playbook: cement, confidence: 0.6}
+  "Consumer Durables": {playbook: generic_nonfinancial, confidence: 0.5}
+  "Consumer Services": {playbook: retail_qsr, confidence: 0.6}
+  "Diversified": {playbook: generic_nonfinancial, overlays: [holdco], confidence: 0.5}
+  "Fast Moving Consumer Goods": {playbook: fmcg, confidence: 0.7}
+  "Financial Services": {playbook: financials, confidence: 0.4}
+  "Forest Materials": {playbook: generic_nonfinancial, confidence: 0.5}
+  "Healthcare": {playbook: pharma, confidence: 0.6}
+  "Information Technology": {playbook: it_services, confidence: 0.8}
+  "Media Entertainment & Publication": {playbook: generic_nonfinancial, confidence: 0.5}
+  "Metals & Mining": {playbook: metals_mining, confidence: 0.7}
+  "Oil Gas & Consumable Fuels": {playbook: oil_gas_omc, confidence: 0.5}
+  "Power": {playbook: power_regulated, confidence: 0.6}
+  "Realty": {playbook: real_estate, confidence: 0.8}
+  "Services": {playbook: generic_nonfinancial, confidence: 0.4}
+  "Telecommunication": {playbook: telecom, confidence: 0.8}
+  "Textiles": {playbook: generic_nonfinancial, confidence: 0.5}
+  "Utilities": {playbook: power_regulated, confidence: 0.5}

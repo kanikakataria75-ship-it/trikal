@@ -258,6 +258,49 @@ def refresh_m2() -> None:
     typer.echo("wrote docs/reports/coverage.md")
 
 
+@app.command("analyze")
+def analyze(
+    code: str,
+    as_of: str = typer.Option("NOW", "--as-of", help="YYYY-MM-DD | NOW"),
+    exchange: str = typer.Option("NSE"),
+) -> None:
+    """Show a company's sector playbook, which metrics/methods it allows, and the metrics with their reasons."""
+    from trikal_analytics import metrics as M
+    from trikal_analytics.lab import Lab
+    from trikal_analytics.result import Forbidden, NotAvailable, Undefined, Value
+    from trikal_core.db import connect
+    from trikal_core.pit import PitReader
+    from trikal_core.timeutil import AsOf
+
+    a = AsOf.parse(as_of)
+    r = PitReader(connect(read_only=True))
+    sid = r.resolve(code, a, exchange)
+    if not sid:
+        typer.echo(f"{code}: not found on {exchange} as of {a}")
+        raise typer.Exit(1)
+    eng = M.Engine(r)
+    res = eng.resolution(sid, a)
+    prof = r.profile(sid, a)
+    typer.echo(f"AS OF {a}   {prof['name']}  ({sid})")
+    typer.echo(f"sector label: {prof['sector']} [{prof['sector_method']}, {prof['sector_confidence']}]   reporting family: {prof['family']}")
+    typer.echo(f"playbook: {res.playbook.id}  via {res.how} (confidence {res.confidence}); overlays {list(res.playbook.overlays) or '-'}")
+    m = Lab(eng).methods(sid, a)
+    typer.echo(f"valuation primary: {m['primary']}  secondary: {m['secondary']}  not primary: {m['not_primary']}")
+    typer.echo(f"forbidden valuation methods ({len(m['forbidden'])}; metrics are checked individually below): {', '.join(m['forbidden'][:12])}{' ...' if len(m['forbidden']) > 12 else ''}")
+    if m["reason"]:
+        typer.echo(f"  why: {m['reason']}")
+    show = ["revenue_ttm", "ebitda_margin", "pat_ttm", "market_cap", "pe", "pb", "ev_ebitda", "roe", "roce", "debt_to_equity", "net_debt_ebitda"]
+    for k, v in eng.compute_many(show, sid, a).items():
+        if isinstance(v, Value):
+            typer.echo(f"  {k:16s} {v.value:>18,.4f} {v.unit}   {'; '.join(v.warnings)[:70]}")
+        elif isinstance(v, Forbidden):
+            typer.echo(f"  {k:16s} FORBIDDEN by {v.playbook}")
+        elif isinstance(v, Undefined):
+            typer.echo(f"  {k:16s} not meaningful: {v.reason}")
+        elif isinstance(v, NotAvailable):
+            typer.echo(f"  {k:16s} n/a: missing {', '.join(v.missing)} {v.reason}")
+
+
 @app.command("raw-status")
 def raw_status() -> None:
     """Summarise the raw zone fetch log."""

@@ -1,0 +1,78 @@
+# Financial-sector playbooks. `parent: financials` carries G2 (no EBITDA/EV/leverage/working-capital).
+# key_metrics marked requires: <source> need data TRIKAL does not hold yet (the engine answers NotAvailable
+# with that source named, never an estimate).
+playbooks:
+  - id: financials
+    label: Financials (parent)
+    forbidden:
+      groups: [ebitda_based, ev_based, leverage_nonfinancial, working_capital, distress_nonfinancial]
+      methods: [dcf_fcff, reverse_dcf_fcff, multiples_ev, ev_per_tonne, ev_per_mw]
+      reason: "Debt is a lender's raw material and EV is undefined for a balance-sheet business (Damodaran, Investment Valuation 3e ch.21; CFA L2 Equity)."
+    peer_group: {min_peers: 8, fallback: financials}
+
+  - id: banks
+    label: Banks
+    parent: financials
+    key_metrics: [roe, roa, pb, gross_npa_amount, net_npa_amount, nim, casa_ratio, pcr, credit_cost, slippage_ratio, car, cet1, ldr]
+    requires: {nim: "annual report / investor presentation (M6)", casa_ratio: "investor presentation (M6)", pcr: "investor presentation (M6)", credit_cost: "investor presentation (M6)", slippage_ratio: "investor presentation (M6)", car: "Pillar 3 / annual report (M6)", cet1: "Pillar 3 / annual report (M6)", ldr: "bank balance sheet (advances / deposits)"}
+    valuation:
+      primary: [p_abv, justified_pb]
+      secondary: [residual_income, pe]
+    caution:
+      - {metric: pe, reason: "Earnings swing with the provisioning cycle; anchor on P/ABV."}
+    cycle: {type: credit_cycle, indicators: [system_credit_growth, system_gnpa, credit_cost]}
+    macro_sensitivities:
+      - {driver: repo_rate, channel: "NIM via EBLR repricing against deposit lag"}
+      - {driver: system_liquidity, channel: "cost of deposits"}
+    red_flags: [slippages_rising_with_falling_pcr, restructured_book_growth, sma2_growth, wholesale_deposit_concentration]
+    charts: [nim_trend, asset_quality_waterfall, casa_trend, pb_band, roa_tree]
+    sources: ["Damodaran, Investment Valuation 3e ch.21", "RBI Master Circular on IRAC norms"]
+
+  - id: nbfc_hfc
+    label: NBFC / HFC
+    parent: financials
+    key_metrics: [roe, roa, pb, aum_growth, spread, cost_of_funds, stage_2_3, credit_cost, alm_gap, leverage_assets_to_equity]
+    requires: {aum_growth: "investor presentation (M6)", spread: "investor presentation (M6)", cost_of_funds: "investor presentation (M6)", stage_2_3: "investor presentation (M6)", credit_cost: "investor presentation (M6)", alm_gap: "ALM disclosure (M6)", leverage_assets_to_equity: "balance sheet (assets / equity)"}
+    valuation:
+      primary: [justified_pb, p_abv]
+      secondary: [pe]
+    cycle: {type: credit_and_liquidity_cycle, indicators: [funding_spreads, system_liquidity]}
+    red_flags: [short_term_borrowings_funding_long_assets, stage_2_creep, rating_watch]
+    sources: ["Damodaran ch.21", "RBI scale-based regulation for NBFCs"]
+
+  - id: insurance_life
+    label: Insurance (life)
+    parent: financials
+    key_metrics: [vnb, vnb_margin, ape, persistency, embedded_value, roev]
+    requires: {vnb: "analyst/investor presentation (M6)", vnb_margin: "investor presentation (M6)", ape: "investor presentation (M6)", persistency: "public disclosures (M6)", embedded_value: "annual report (M6)", roev: "annual report (M6)"}
+    valuation:
+      primary: [p_ev]
+      secondary: [justified_pb]
+    not_primary: [pe]
+    caution:
+      - {metric: pe, reason: "Accounting profit understates value creation in life insurance; value it on embedded value (P/EV)."}
+    red_flags: [persistency_decline, vnb_margin_compression]
+    sources: ["IAI APS-10 (embedded value)"]
+
+  - id: insurance_general
+    label: Insurance (general)
+    parent: financials
+    key_metrics: [combined_ratio, loss_ratio, expense_ratio, solvency, investment_yield, gwp_growth]
+    requires: {combined_ratio: "public disclosures (M6)", loss_ratio: "public disclosures (M6)", expense_ratio: "public disclosures (M6)", solvency: "public disclosures (M6)", investment_yield: "public disclosures (M6)", gwp_growth: "public disclosures (M6)"}
+    valuation:
+      primary: [justified_pb, pe]
+    red_flags: [reserve_releases_flattering_combined_ratio]
+
+  - id: capital_markets
+    label: AMC / broker / exchange / RTA
+    # Deliberately NOT a child of `financials`: AMCs, exchanges and RTAs are asset-light and unlevered, so EBITDA and
+    # margins are meaningful for them. Broker balance sheets are the exception; they carry the financials rules by override.
+    key_metrics: [roe, pe, revenue_growth, profit_growth]
+    requires: {aum_market_share: "AMFI (M6)", yield_on_aum: "annual report (M6)", adto: "exchange statistics", client_additions: "exchange / depository statistics"}
+    valuation:
+      primary: [pe]
+      secondary: [mcap_to_aum]
+    forbidden:
+      groups: [leverage_nonfinancial, working_capital, distress_nonfinancial]
+      methods: [dcf_fcff, reverse_dcf_fcff]
+    red_flags: [revenue_concentration_in_fno, regulatory_exposure]

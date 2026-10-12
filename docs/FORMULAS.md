@@ -218,3 +218,72 @@ NSE does not publish classification history. `classification` rows carry their p
 
 The label is NSE's sector level (22 sectors) of the India Industry Classification. The macro-sector, industry
 and basic-industry detail is not published per company.
+
+---
+
+## Sector rules and metrics (M4)
+
+**Which playbook applies.** `config/playbooks/mapping.yaml`, evaluated top to bottom, first match wins, and the
+answer carries `how` and a confidence: explicit override 1.0 → filing family (`BANKING`, `NBFC_INDAS`) 0.9–0.95 →
+name rule inside a sector 0.6–0.8 → NSE sector default 0.4–0.8 → fallback (`generic_nonfinancial`, 0.2). Nothing
+is silently defaulted; a low-confidence resolution is attached to every metric as a warning.
+
+**Merge.** global → parent chain → base → overlays. Forbidden sets are unions: an overlay can add restrictions,
+never remove them. Loading fails if a playbook forbids something it lists as a key metric or primary valuation,
+or uses an unknown valuation id.
+
+**Three different "no number" states** (never confuse them):
+
+| State | Meaning | Example |
+|---|---|---|
+| `Forbidden` (raised) | sector policy: the computation does not run | EBITDA, EV or debt/equity for a bank |
+| `Undefined` | a data condition makes the number meaningless | P/E when trailing profit ≤ 0 (G1); growth from a non-positive base |
+| `NotAvailable` | the inputs are missing, named, or need a source we do not hold yet | NIM ("needs investor presentation (M6)") |
+
+`not_primary` is a fourth, softer rule: the metric may be computed but may not be the primary valuation
+(P/E for life insurers, cement, metals, holdcos, and for loss-makers).
+
+**Definitions** (all trailing, INR, one basis per computation; `consolidated` if the company reported it
+within 400 days, else `standalone`; never mixed):
+
+| Metric | Formula |
+|---|---|
+| TTM flow | sum of the latest four consecutive quarters (gaps 80–100 days), or the latest 12-month figure if newer; older than 18 months → NotAvailable |
+| EBITDA | revenue from operations − (total expenses − finance costs − depreciation). Excludes other income and exceptional items. Reported **post-Ind AS 116** (lease payments are not in the results filings), flagged on every value |
+| EBIT / margins | EBITDA − depreciation; margins ÷ revenue from operations |
+| Shares outstanding | paid-up equity capital ÷ face value, divided by the factor of any split/bonus that went ex after that filing became known |
+| Market cap | last close (≤ 10 days old) × shares |
+| Net debt | borrowings (current + non-current) − cash & equivalents − other bank balances. Investments are not netted |
+| EV | market cap + net debt + non-controlling interest (book) |
+| P/E | market cap ÷ trailing profit attributable to owners |
+| P/B | market cap ÷ equity attributable to owners |
+| ROE, ROA | trailing profit ÷ closing equity (assets) |
+| ROCE | EBIT ÷ (total assets − current liabilities) |
+| Receivable / inventory / payable days | closing balance ÷ (revenue, or COGS = materials + traded purchases + inventory change) × 365 |
+| Altman Z″ (emerging-market, non-financials) | 3.25 + 6.56 WC/TA + 3.26 RE/TA + 6.72 EBIT/TA + 1.05 BookEquity/TL (reserves = other equity) |
+| FCF | latest 12-month operating cash flow + purchases of PPE and intangibles (reported as outflows) |
+
+Inputs that came from the pre-2018 HTML pages add a warning (`old_page_input:…`); where companies typed the
+template inconsistently the warning says so.
+
+**Valuation** (`valuation.py`, pure functions; `lab.py` supplies point-in-time inputs). No hidden defaults:
+rates and growth are always passed in, labelled `user`, or requested from `template_assumptions` and labelled
+`template` (conventional starting values the user must confirm). Missing assumptions raise an error naming them.
+
+- DCF (FCFF): growth fades linearly from `g_start` in year 1 to `g_terminal` in year N, then Gordon growth;
+  EV = PV(flows) + PV(terminal); equity = EV − net debt − minorities. FCFF base = latest 12-month
+  (operating cash flow + capex) + finance costs × (1 − effective tax rate, bounded 0–40%). Requires WACC > g.
+- FCFE, DDM: same fade at the cost of equity (DDM per share).
+- **Reverse DCF**: bisection for the year-1 growth at which DCF equity value equals market cap. If the market
+  value lies outside what growth in [−30%, +80%] can produce, the answer is "no solution", never a clamped number.
+- Justified P/B = (ROE − g) / (Ke − g); justified P/E = payout × (1 + g) / (Ke − g).
+- Residual income: B0 + Σ PV[(ROE_t − Ke) B_{t−1}] + terminal residual income (persistence-adjusted).
+- SOTP: Σ stake × part value − holdco net debt, then × (1 − holdco discount). Unlisted parts are flagged `assumed`.
+- NAV, EV/tonne, EV/MW: arithmetic on user-supplied asset values or capacity.
+- **Scenarios**: explicit bear/base/bull with probabilities summing to 1 → a per-share *range* and the
+  probability-weighted value. Output is never a rating or target price; `value_to_price` is a ratio.
+- **Relative valuation (G4)**: a multiple is reported with its percentile in the company's own history
+  (month-end observations over 5 years, each computed strictly as of its date) and among same-sector, same-playbook
+  peers as of the same date. Fewer than 8 observations or `min_peers` comparable peers → no percentile, with a
+  warning. A cyclical company with a low P/E at margins in the top 20% of its own history gets
+  `cyclical_peak_trap`.

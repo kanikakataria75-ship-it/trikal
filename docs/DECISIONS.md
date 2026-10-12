@@ -77,3 +77,12 @@ All ADRs below are **proposed** at M0 and become accepted when the owner signs o
 ### ADR-017 · 2026-10-12 · proposed: Classification rows carry method and confidence; backward projection is explicit
 **Decision:** NSE publishes no classification history. Official constituent files give dated snapshots (confidence 1.0, accumulating forward); the earliest label is projected backwards with confidence 0.5 and `method='assumed_static_backward'`; pre-2011 press-release industries are kept as a separate legacy scheme. Readers take `min_confidence`.
 **Consequences:** A backtest can run official-only or with the assumption, and the report states which. This is the control for the failure that sank the owner's earlier sector study.
+
+### ADR-018 · 2026-10-12 · proposed: Sector rules are enforced in the engine; three kinds of "no number"
+**Context:** PROMPT invariant 5: invalid metric/method combinations must be impossible to compute, not merely hidden.
+**Decision:** Playbooks (YAML) are merged global → parents → base → overlays with union-only restrictions, validated at load, and checked inside `Engine.compute` and `Lab.run` before any input is read. A sector prohibition raises `ForbiddenMetric`/`ForbiddenMethod`. A data condition returns `Undefined` (P/E for a loss, per rule G1), missing inputs return `NotAvailable` naming them or the source needed (M5/M6). `not_primary` marks metrics that may be computed but not offered as the primary valuation. The first draft made the loss-making overlay forbid P/E; that confused a data condition with a sector policy and was corrected during testing.
+**Consequences:** Tests mutate the enforcement out and fail; the UI can ask `explain()` and show the rule and reason.
+
+### ADR-019 · 2026-10-12 · proposed: Company-to-playbook mapping is rule-based with stated confidence; no hidden valuation defaults
+**Decision:** NSE publishes only 22 sector labels, too coarse for banks versus NBFCs versus insurers, so the mapping adds filing-family and name rules and records `how` and a confidence on every resolution (overrides in `mapping.yaml` win and are human-reviewed). Valuation never injects default discount or growth rates: they are user inputs, or explicitly requested `template` values that the output labels as templates.
+**Consequences:** Low-confidence assignments are visible instead of quietly applied. The name rules are heuristics to be reviewed against the real universe (open item for the owner).

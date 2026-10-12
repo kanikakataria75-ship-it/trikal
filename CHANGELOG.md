@@ -72,3 +72,36 @@ The full-universe pass rates will be published in `docs/reports/coverage.md` as 
   the report says so.
 - Scheme-level mutual fund holdings (AMC files) deferred; category totals per quarter are in (RISKS R-13).
 - Annual-report PDFs and concalls are M6.
+
+## M4: Sector playbook engine + Valuation Lab (CODE COMPLETE for review, 2026-10-12)
+
+Built ahead of the UI milestone because it needs no UI; it runs on the M2 data as it arrives.
+
+**Sector rules (enforced in the engine, not the UI)**
+- 30 playbooks + 4 overlays as YAML (`config/playbooks/`): the 27 sectors of the spec, global rules and metric
+  groups, parents, overlays (holdco, PSU, cyclical, loss-making). Union-only restrictions; validated at load.
+- Company -> playbook by explicit override, filing family, name rule or NSE sector, with `how` and a confidence.
+  Checked against the real universe: banks 34 (SBI, PNB, Axis ...), NBFC/HFC 42, capital markets 12, insurers 10,
+  hospitals 4, ... ; the review found and fixed four rule bugs (see tests).
+- `Engine.compute` raises `ForbiddenMetric` before any computation (EBITDA, EV, leverage, working capital,
+  Altman for financials); `Lab.run` raises `ForbiddenMethod` (FCFF DCF for banks) before reading any input.
+  Three distinct "no number" states: Forbidden (policy), Undefined (data condition, e.g. P/E for a loss), NotAvailable
+  (inputs or an external source missing, named).
+
+**Metrics** (`metrics.py`): revenue/PAT/EBITDA/EBIT/margins, net debt, EV, market cap (shares rolled forward for
+later splits/bonuses), P/E, P/B, EV/EBITDA, EV/sales, ROE, ROA, ROCE, coverage, working-capital days, Altman Z'',
+FCF and yield, growth. Every value carries its inputs with filing and `known_at`, plus warnings (old-page input,
+post-Ind-AS-116 EBITDA, low playbook confidence, caution text). Sector metrics that need concalls or regulators
+(NIM, CASA, ARPOB, order book ...) answer "needs <source>".
+
+**Valuation Lab** (`valuation.py` + `lab.py`): FCFF/FCFE DCF, reverse DCF ("what growth is priced in", with a
+true "no solution"), DDM, justified P/B, residual income, SOTP with holdco discount, NAV, EV/tonne, EV/MW,
+bear/base/bull ranges with probabilities, sensitivity grids, multiples vs own history and sector peers (G4,
+cyclical-peak-trap warning). No hidden defaults: assumptions are `user`, `pit` or `template`, and the output says which.
+
+**Tests:** 115 in total (60 new): closed-form identities for every model, hand-checkable synthetic company for the
+metrics, enforcement mutation-checked (removing the checks fails 2 tests), point-in-time visibility, basis never mixed.
+`trikal analyze <CODE>` shows playbook, allowed/blocked items and metrics with reasons.
+
+**Honest limits:** values for most companies read "missing X" until the M2 download finishes; the name rules are
+heuristics to review (RISKS R-31); sector operating metrics wait for M5/M6 (R-32); no UI yet.

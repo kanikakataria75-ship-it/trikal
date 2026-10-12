@@ -1,0 +1,31 @@
+# Overlays are merged ON TOP of a base playbook. Forbidden lists are unions: an overlay can add restrictions,
+# never remove them. Overlays are selected by rule (mapping.yaml) or by explicit override, never by guess.
+overlays:
+  - id: holdco
+    label: Conglomerate / holding company
+    valuation: {primary: [sotp], secondary: [nav]}
+    not_primary: [pe]
+    caution:
+      - {metric: pe, reason: "Consolidated earnings of a holding company mix listed stakes, associates and operating businesses; value the parts (look-through) and apply a holdco discount scenario (G5)."}
+    requires: {listed_subsidiary_stakes: "shareholding of the subsidiary + market price (PIT)", holdco_discount_history: "own history of NAV discount"}
+
+  - id: psu
+    label: Public-sector undertaking
+    caution:
+      - {metric: pe, reason: "Government pricing and dividend mandates affect earnings quality; read together with the governance overlay."}
+    requires: {govt_stake: "shareholding pattern", dividend_policy: "annual report (M6)", divestment_pipeline: "DIPAM (M5)"}
+
+  - id: cyclical
+    label: Cyclical earnings
+    cyclical: true
+    not_primary: [pe]
+    caution:
+      - {metric: pe, reason: "Cyclical peak trap: judge on mid-cycle earnings, not a single peak year."}
+
+  - id: loss_making
+    label: Loss-making (added automatically when trailing profit <= 0)
+    # Not a prohibition: P/E is a data condition (Undefined, G1), not a sector policy (Forbidden). The overlay only
+    # stops an earnings multiple being offered as the primary valuation of a company with no earnings.
+    not_primary: [pe, ev_ebitda]
+    caution:
+      - {metric: pe, reason: "Trailing profit is not positive: P/E is not meaningful (G1). Use EV/sales, P/B or a DCF scenario."}
