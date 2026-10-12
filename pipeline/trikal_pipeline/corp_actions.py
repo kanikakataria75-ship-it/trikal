@@ -84,9 +84,12 @@ def _norm(s: str) -> str:
     return s.strip()
 
 
+# "spl" is the exchange's own abbreviation ("Spl-Rs10 To Rs2/Bonus-1:2"); the target may be spelled out
+# ("Face Value Split From 10/- To Face Value 2/-").
 _SPLIT = re.compile(
-    r"(?:split|sub[- ]?division|sub[- ]?divided)[^0-9]*?" + _RS + _NUM + r"[^0-9]*?(?:to|-)\s*" + _RS + _NUM)
-_SPLIT_NO_RS = re.compile(r"(?:split|sub[- ]?division)[^0-9]*?" + _NUM + r"\s*(?:/-)?\s*to\s*" + _NUM)
+    r"(?:split|\bspl\b|sub[- ]?division|sub[- ]?divided)[^0-9]*?" + _RS + _NUM + r"[^0-9]*?(?:to|-)\s*" + _RS + _NUM)
+_SPLIT_NO_RS = re.compile(r"(?:split|\bspl\b|sub[- ]?division)[^0-9]*?" + _NUM + r"\s*(?:/-)?\s*to\s*(?:face\s*value\s*(?:of\s*)?)?"
+                          + r"(?:" + _RS + r")?" + _NUM)
 _CONSOL = re.compile(r"consolidat\w*[^0-9]*?" + _RS + "?" + _NUM + r"[^0-9]*?to\s*" + _RS + "?" + _NUM)
 _BONUS = re.compile(r"bonus(?:\s*issue)?[^0-9:]{0,12}" + _NUM + r"\s*:\s*" + _NUM)
 _RIGHTS = re.compile(r"rights?(?:\s*issue)?[^0-9:]{0,12}" + _NUM + r"\s*:\s*" + _NUM + r"([^/]*(?:/[^/]*)?)")

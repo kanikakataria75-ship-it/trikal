@@ -6,7 +6,8 @@
    move. Switching days collapses the city and raises the new one. Every tile is a real security and a real print. */
 
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
-import { Environment, Html, Lightformer } from "@react-three/drei";
+import { Environment, Html, Lightformer, OrbitControls } from "@react-three/drei";
+import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { Bloom, EffectComposer, ToneMapping, Vignette } from "@react-three/postprocessing";
 import { ToneMappingMode } from "postprocessing";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
@@ -82,13 +83,44 @@ export function layoutCity(tiles: Tile[]): { placed: Placed[]; districts: Distri
 }
 
 /* ---------- colour and height of a move ---------- */
-const TEAL = new THREE.Color("#2EC4B6"), ROSE = new THREE.Color("#F0577A"), FLAT = new THREE.Color("#2a2f37"), NA = new THREE.Color("#1a1d22");
+const UP = new THREE.Color("#39FF88"), DN = new THREE.Color("#FF2E63"), FLAT = new THREE.Color("#2a2f37"), NA = new THREE.Color("#1a1d22");
 export function moveColor(v: number | null, out = new THREE.Color()) {
   if (v === null) return out.copy(NA);
-  const a = Math.min(1, Math.abs(v) / 0.06);
-  out.copy(FLAT).lerp(v >= 0 ? TEAL : ROSE, Math.pow(a, 0.7));
-  const glow = Math.max(0, Math.abs(v) - 0.05) * 14; // big moves exceed 1.0 and bloom
+  const a = Math.min(1, Math.abs(v) / 0.05);
+  out.copy(FLAT).lerp(v >= 0 ? UP : DN, Math.pow(a, 0.6));
+  const glow = Math.max(0, Math.abs(v) - 0.06) * 4; // only very large moves pass 1.0 and bloom, gently
   return out.multiplyScalar(1 + glow);
+}
+
+/* Neon material: tiles glow in their own colour, and coloured faces glitter (a few cells flash each frame,
+   more on bigger moves). Grey, near-flat tiles stay matte. */
+function useNeonMaterial() {
+  const mat = useMemo(() => {
+    const m = new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: 0.3, metalness: 0.35, envMapIntensity: 0.7 });
+    const uTime = { value: 0 };
+    m.onBeforeCompile = (sh) => {
+      sh.uniforms.uTime = uTime;
+      sh.vertexShader = "varying vec3 vNeonWp;\n" + sh.vertexShader.replace("#include <begin_vertex>", `#include <begin_vertex>
+        vec4 neonWp = vec4(transformed, 1.0);
+        #ifdef USE_INSTANCING
+          neonWp = instanceMatrix * neonWp;
+        #endif
+        vNeonWp = (modelMatrix * neonWp).xyz;`);
+      sh.fragmentShader = "uniform float uTime;\nvarying vec3 vNeonWp;\n" + sh.fragmentShader.replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>
+        #if defined( USE_COLOR )
+          vec3 neonC = vColor.rgb;
+          float neonSat = max(max(neonC.r, neonC.g), neonC.b) - min(min(neonC.r, neonC.g), neonC.b);
+          vec2 neonCell = floor(vNeonWp.xz * 46.0 + vec2(vNeonWp.y * 37.0, vNeonWp.y * 19.0));
+          float neonTw = fract(sin(dot(neonCell + floor(uTime * 8.0), vec2(12.9898, 78.233))) * 43758.5453);
+          float neonSpark = step(0.988 - 0.008 * clamp(neonSat, 0.0, 1.0), neonTw) * smoothstep(0.12, 0.55, neonSat);
+          totalEmissiveRadiance += neonC * 0.2 * neonSat + mix(vec3(1.0), neonC, 0.5) * neonSpark * 1.3;
+        #endif`);
+    };
+    m.userData.uTime = uTime;
+    return m;
+  }, []);
+  useFrame((s) => { mat.userData.uTime.value = s.clock.elapsedTime; });
+  return mat;
 }
 const heightOf = (v: number | null) => (v === null ? 0.03 : Math.sign(v || 1e-9) * Math.min(3.4, 0.05 + Math.abs(v) * 26));
 
@@ -99,6 +131,7 @@ function City({ placed, mode, onHover, onPick }: { placed: Placed[]; mode: "clos
   const target = useRef<Float32Array>(new Float32Array(0));
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const color = useMemo(() => new THREE.Color(), []);
+  const neon = useNeonMaterial();
   const n = placed.length;
 
   useLayoutEffect(() => {
@@ -127,7 +160,8 @@ function City({ placed, mode, onHover, onPick }: { placed: Placed[]; mode: "clos
       cur.current[i] += (target.current[i] - cur.current[i]) * kk;
       const h = cur.current[i];
       const p = placed[i];
-      dummy.position.set(p.x, h / 2, p.z);
+      // keep every face off the floor plane (y = 0): coplanar faces z-fight and flicker
+      dummy.position.set(p.x, h >= 0 ? h / 2 + 0.006 : h / 2 - 0.018, p.z);
       dummy.scale.set(p.w, Math.max(0.004, Math.abs(h)), p.d);
       dummy.updateMatrix();
       m.setMatrixAt(i, dummy.matrix);
@@ -145,10 +179,18 @@ function City({ placed, mode, onHover, onPick }: { placed: Placed[]; mode: "clos
       onClick={(e) => { e.stopPropagation(); if (e.instanceId !== undefined) onPick(placed[e.instanceId]); }}
     >
       <boxGeometry args={[1, 1, 1]} />
-      <meshStandardMaterial color="#ffffff" roughness={0.35} metalness={0.25} envMapIntensity={0.6} />
+      <primitive object={neon} attach="material" />
     </instancedMesh>
   );
 }
+
+const SHORT: Record<string, string> = {
+  "Automobile and Auto Components": "Auto", "Fast Moving Consumer Goods": "FMCG", "Oil Gas & Consumable Fuels": "Oil & Gas",
+  "Information Technology": "IT", "Financial Services": "Financials", "Media Entertainment & Publication": "Media",
+  "Construction Materials": "Cement & materials", "Metals & Mining": "Metals", "Consumer Services": "Consumer services",
+  "Consumer Durables": "Durables", "Capital Goods": "Capital goods", "Telecommunication": "Telecom",
+};
+export const shortSector = (x: string) => SHORT[x] ?? x;
 
 function Floor({ districts }: { districts: District[] }) {
   const lines = useMemo(() => {
@@ -164,40 +206,76 @@ function Floor({ districts }: { districts: District[] }) {
   return (
     <group>
       {/* dark glass: what sank is still visible beneath it */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} renderOrder={1}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} renderOrder={1}>
         <planeGeometry args={[W + 0.6, D + 0.6]} />
-        <meshPhysicalMaterial color="#0a0b0e" transparent opacity={0.62} roughness={0.15} metalness={0.4} clearcoat={1} depthWrite={false} />
+        <meshPhysicalMaterial color="#0a0b0e" transparent opacity={0.6} roughness={0.35} metalness={0.12} clearcoat={0.35} depthWrite={false} polygonOffset polygonOffsetFactor={1} polygonOffsetUnits={1} />
       </mesh>
       <lineSegments geometry={lines} renderOrder={2}>
-        <lineBasicMaterial color="#8C6F1E" transparent opacity={0.55} />
+        <lineBasicMaterial color="#8C6F1E" transparent opacity={0.6} />
       </lineSegments>
-      {districts.filter((s) => s.w * s.d > 2.2).map((s) => (
-        <Html key={s.name} position={[s.x + 0.14, 0.02, s.z + 0.2]} className="city-district" zIndexRange={[5, 0]} style={{ pointerEvents: "none" }}>
-          <span>{s.name}</span>
-          {s.avg !== null && <b className={s.avg >= 0 ? "pos" : "neg"}>{s.avg >= 0 ? "+" : "−"}{Math.abs(s.avg * 100).toFixed(1)}%</b>}
-        </Html>
-      ))}
     </group>
   );
 }
 
+/* Screen-space labels: always upright and readable, whatever the camera angle. */
+function Labels({ districts, placed, mode }: { districts: District[]; placed: Placed[]; mode: "close" | "open" }) {
+  const top = useMemo(() => {
+    const v = (p: Placed) => (mode === "open" ? p.t.gap : p.t.change);
+    const byArea = [...placed].sort((a, b) => b.w * b.d - a.w * a.d).slice(0, 10);
+    const byMove = [...placed].filter((p) => v(p) !== null).sort((a, b) => Math.abs(v(b)!) - Math.abs(v(a)!)).slice(0, 6);
+    const seen = new Set<string>();
+    return [...byMove, ...byArea].filter((p) => (seen.has(p.t.security_id) ? false : (seen.add(p.t.security_id), true)));
+  }, [placed, mode]);
+  return (
+    <>
+      {districts.filter((s) => s.w * s.d > 3).map((s) => (
+        <Html key={"d" + s.name} position={[s.x + 0.12, 0.02, s.z + s.d - 0.12]} zIndexRange={[4, 0]} style={{ pointerEvents: "none" }}>
+          <div className="city-district">
+            <span>{shortSector(s.name)}</span>
+            {s.avg !== null && <b className={s.avg >= 0 ? "pos" : "neg"}>{s.avg >= 0 ? "+" : "−"}{Math.abs(s.avg * 100).toFixed(1)}%</b>}
+          </div>
+        </Html>
+      ))}
+      {top.map((p) => {
+        const v = mode === "open" ? p.t.gap : p.t.change;
+        const h = heightOf(v);
+        return (
+          <Html key={"t" + p.t.security_id} position={[p.x, Math.max(0, h) + 0.15, p.z]} center zIndexRange={[6, 5]} style={{ pointerEvents: "none" }}>
+            <div className={`city-tag ${(v ?? 0) >= 0 ? "up" : "down"}`}>
+              <b>{p.t.code}</b>{v !== null && <span>{v >= 0 ? "+" : "−"}{Math.abs(v * 100).toFixed(1)}%</span>}
+            </div>
+          </Html>
+        );
+      })}
+    </>
+  );
+}
+
+/* Orbit/zoom for the viewer; a slow drift and an arrival dolly on every new day. */
 function Rig({ arrive }: { arrive: number }) {
-  const { camera, pointer } = useThree();
-  const t = useRef(0);
-  const a0 = useRef(arrive);
+  const { camera } = useThree();
+  const ctl = useRef<OrbitControlsImpl>(null);
   const since = useRef(0);
+  const last = useRef(arrive);
+  const touched = useRef(false);
   useFrame((_, dt) => {
-    t.current += dt;
-    if (a0.current !== arrive) { a0.current = arrive; since.current = 0; }
+    if (last.current !== arrive) { last.current = arrive; since.current = 0; }
     since.current += dt;
-    const e = 1 - Math.pow(1 - Math.min(1, since.current / 1.8), 3);   // arrival dolly on every new day
-    const ang = Math.sin(t.current * 0.07) * 0.22 + pointer.x * 0.18;
-    const r = 15.5 - e * 2.2;
-    const y = 10.5 - e * 2.6 + pointer.y * 0.8;
-    camera.position.set(Math.sin(ang) * r, y, Math.cos(ang) * r);
-    camera.lookAt(0, -0.4, 0.4);
+    const c = ctl.current;
+    if (!c) return;
+    if (since.current < 1.8) {
+      const e = 1 - Math.pow(1 - since.current / 1.8, 3);
+      const dir = camera.position.clone().sub(c.target).normalize();
+      const dist = 21 - e * (21 - (touched.current ? camera.position.distanceTo(c.target) : 14.5));
+      camera.position.copy(c.target.clone().add(dir.multiplyScalar(dist)));
+    }
+    c.update();
   });
-  return null;
+  return (
+    <OrbitControls ref={ctl} makeDefault target={[0, -0.3, 0.6]} enableDamping dampingFactor={0.08} autoRotate autoRotateSpeed={0.25}
+      minPolarAngle={0.35} maxPolarAngle={1.18} minDistance={7} maxDistance={24} enablePan={false}
+      onStart={() => { touched.current = true; }} />
+  );
 }
 
 export default function MarketCity({ tiles, mode, arrive, onHover, onPick }: {
@@ -206,23 +284,24 @@ export default function MarketCity({ tiles, mode, arrive, onHover, onPick }: {
 }) {
   const { placed, districts } = useMemo(() => layoutCity(tiles), [tiles]);
   return (
-    <Canvas dpr={[1, 1.5]} flat camera={{ position: [0, 9, 13], fov: 38, near: 0.1, far: 80 }} gl={{ antialias: true, powerPreference: "high-performance" }}>
+    <Canvas dpr={[1, 1.5]} flat camera={{ position: [0, 13.5, 9.5], fov: 36, near: 0.1, far: 80 }} gl={{ antialias: true, powerPreference: "high-performance" }}>
       <color attach="background" args={["#060709"]} />
-      <fog attach="fog" args={["#060709", 16, 34]} />
+      <fog attach="fog" args={["#060709", 20, 40]} />
       <Environment resolution={128} frames={1}>
         <Lightformer form="rect" intensity={2.4} color="#fff1d2" position={[0, 8, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[16, 6, 1]} />
         <Lightformer form="rect" intensity={1.0} color="#d4af37" position={[-10, 2, 4]} rotation={[0, Math.PI / 2, 0]} scale={[10, 2, 1]} />
         <Lightformer form="rect" intensity={0.9} color="#8fb4ff" position={[10, 1, -4]} rotation={[0, -Math.PI / 2, 0]} scale={[10, 2, 1]} />
       </Environment>
-      <ambientLight intensity={0.25} />
+      <ambientLight intensity={0.3} />
       <directionalLight position={[-6, 12, 8]} intensity={1.6} color="#ffe6b8" />
       <directionalLight position={[8, -6, -6]} intensity={0.8} color="#ff8fa8" />
       <Rig arrive={arrive} />
       <City placed={placed} mode={mode} onHover={(p, e) => onHover(p, e?.nativeEvent.clientX, e?.nativeEvent.clientY)} onPick={onPick} />
       <Floor districts={districts} />
+      <Labels districts={districts} placed={placed} mode={mode} />
       <EffectComposer multisampling={0}>
-        <Bloom mipmapBlur intensity={0.85} luminanceThreshold={0.9} luminanceSmoothing={0.25} radius={0.7} />
-        <Vignette offset={0.2} darkness={0.9} />
+        <Bloom mipmapBlur intensity={0.4} luminanceThreshold={1.05} luminanceSmoothing={0.2} radius={0.55} />
+        <Vignette offset={0.25} darkness={0.75} />
         <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
       </EffectComposer>
     </Canvas>

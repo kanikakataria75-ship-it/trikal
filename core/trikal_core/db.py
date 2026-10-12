@@ -212,6 +212,15 @@ CREATE TABLE IF NOT EXISTS classification (
 );
 
 -- Data-quality issues: anything we could not resolve is recorded, never patched silently.
+-- Context for a day (Time Machine): editorial summaries from Wikipedia, CC BY-SA 4.0. Never an input to any
+-- computation; no known_at (written after the fact). Lineage: page title + raw sha.
+CREATE TABLE IF NOT EXISTS context_event (
+    day DATE, scope VARCHAR,                 -- world | india
+    category VARCHAR, story VARCHAR,         -- daily-page heading and parent story, if any
+    text VARCHAR, source_name VARCHAR, source_url VARCHAR,
+    page VARCHAR, source_sha VARCHAR, recorded_at TIMESTAMPTZ
+);
+
 CREATE TABLE IF NOT EXISTS dq_issue (
     kind VARCHAR, exchange VARCHAR, code VARCHAR, d DATE, detail VARCHAR, severity VARCHAR,
     created_at TIMESTAMPTZ

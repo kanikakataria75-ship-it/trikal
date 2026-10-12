@@ -294,12 +294,17 @@ def _profile(self: PitReader, security_id: str, as_of: AsOf) -> dict:
 
 def _last_price(self: PitReader, security_id: str, as_of: AsOf, exchange: str = "NSE",
                 max_age_days: int = 10) -> tuple[dt.date, float] | None:
-    """Latest unadjusted close known at as_of, or None if older than max_age_days (stale quotes are not used)."""
+    """Latest unadjusted close known at as_of, or None if older than max_age_days (stale quotes are not used).
+    One session can carry several NSE series (EQ, BE, IL institutional lots, N1.. debt): the main equity series
+    wins, the same priority as `prices`, never an arbitrary one."""
     row = self.con.execute(
         """SELECT e.trade_date, e.close FROM price_eod e JOIN listing l ON l.exchange = e.exchange AND l.code = e.code
                   AND e.trade_date BETWEEN l.valid_from AND l.valid_to
            WHERE l.security_id = ? AND e.exchange = ? AND e.known_at <= ? AND e.close > 0
-           ORDER BY e.trade_date DESC LIMIT 1""", [security_id, exchange, as_of.ts]).fetchone()
+           ORDER BY e.trade_date DESC,
+                    CASE e.series WHEN 'EQ' THEN 0 WHEN 'BE' THEN 1 WHEN 'BZ' THEN 2 WHEN '' THEN 3 ELSE 9 END,
+                    e.volume DESC NULLS LAST
+           LIMIT 1""", [security_id, exchange, as_of.ts]).fetchone()
     if not row or (as_of.date_ist - row[0]).days > max_age_days:
         return None
     return row[0], row[1]
@@ -507,7 +512,8 @@ def _market_day(self: PitReader, as_of: AsOf, movers: int = 8) -> dict | None:
         """SELECT e.code, l.security_id, e.close, e.prev_close, e.turnover, e.name
            FROM price_eod e LEFT JOIN listing l ON l.exchange = 'NSE' AND l.code = e.code AND e.trade_date BETWEEN l.valid_from AND l.valid_to
            WHERE e.exchange = 'NSE' AND e.trade_date = ? AND e.series = 'EQ' AND e.known_at <= ? AND e.close > 0 AND e.prev_close > 0
-             AND NOT EXISTS (SELECT 1 FROM adj_event a WHERE a.exchange = 'NSE' AND a.code = e.code AND a.ex_date = e.trade_date)""",
+             AND NOT EXISTS (SELECT 1 FROM adj_event a WHERE a.exchange = 'NSE' AND a.ex_date = e.trade_date
+                             AND (a.security_id = l.security_id OR a.code = e.code))""",
         [d, as_of.ts]).fetchall()
     members = {r[0] for r in self.index_members("NIFTY500", as_of)}
     chg = [(code, sid, c / p - 1, t or 0.0, nm, c) for code, sid, c, p, t, nm in rows]
@@ -580,10 +586,11 @@ def _session_map(self: PitReader, as_of: AsOf) -> dict | None:
     # one pass over the day's prints (fast, zone-mapped on trade_date), then keep the members in Python
     rows = self.con.execute(
         """SELECT l.security_id, e.code, e.open, e.close, e.prev_close, e.turnover, e.name, e.series,
-                  a.code IS NOT NULL AS ex_day
+                  a.security_id IS NOT NULL AS ex_day
            FROM price_eod e
            JOIN listing l ON l.exchange = 'NSE' AND l.code = e.code AND e.trade_date BETWEEN l.valid_from AND l.valid_to
-           LEFT JOIN (SELECT DISTINCT code FROM adj_event WHERE exchange = 'NSE' AND ex_date = ?) a ON a.code = e.code
+           -- announcement-only events carry no code, so ex-dates are matched on the security
+           LEFT JOIN (SELECT DISTINCT security_id FROM adj_event WHERE exchange = 'NSE' AND ex_date = ?) a ON a.security_id = l.security_id
            WHERE e.exchange = 'NSE' AND e.trade_date = ? AND e.known_at <= ? AND e.series IN ('EQ', 'BE') AND e.close > 0""",
         [d, d, as_of.ts]).fetchall()
     universe = "nifty500" if members else "all_equities"   # index history starts in 1998
@@ -634,13 +641,54 @@ def _ew_path(self: PitReader, security_ids: list[str], start: dt.date, end: dt.d
                FROM price_eod e JOIN listing l ON l.exchange = 'NSE' AND l.code = e.code AND e.trade_date BETWEEN l.valid_from AND l.valid_to
                WHERE e.exchange = 'NSE' AND e.series = 'EQ' AND e.trade_date BETWEEN ? AND ? AND e.known_at <= ?
                  AND e.close > 0 AND e.prev_close > 0 AND l.security_id IN ({ph})
-                 AND NOT EXISTS (SELECT 1 FROM adj_event a WHERE a.exchange = 'NSE' AND a.code = e.code AND a.ex_date = e.trade_date))
+                 AND NOT EXISTS (SELECT 1 FROM adj_event a WHERE a.exchange = 'NSE' AND a.security_id = l.security_id
+                                 AND a.ex_date = e.trade_date))
            SELECT trade_date, avg(r), count(*) FILTER (WHERE r > 0.0005), count(*) FILTER (WHERE r < -0.0005), count(*)
            FROM p GROUP BY 1 ORDER BY 1""",
         [start, end, known_by.ts, *ids]).fetchall()
     return [{"d": d, "r": r, "adv": a, "dec": dc, "n": n} for d, r, a, dc, n in rows]
 
 
+def _day_tape(self: PitReader, as_of: AsOf, limit: int = 40) -> list[dict]:
+    """What the exchange itself announced for the session at as_of: corporate actions going ex that day,
+    results broadcast that day, and Nifty 500 changes announced or taking effect that day."""
+    d = as_of.date_ist
+    out: list[dict] = []
+    for code, subj, kind in self.con.execute(
+            """SELECT code, any_value(subject), any_value(kind) FROM corp_action
+               WHERE exchange = 'NSE' AND ex_date = ? AND known_at <= ? AND kind <> 'other'
+               GROUP BY code ORDER BY (any_value(kind) IN ('split', 'bonus', 'demerger')) DESC, code LIMIT ?""",
+            [d, as_of.ts, limit]).fetchall():
+        out.append({"kind": "corporate_action", "code": code, "text": f"{code} goes ex: {(subj or kind).strip()}"})
+    for sym, fam, label in self.con.execute(
+            """SELECT symbol, any_value(family), any_value(period_label) FROM filing
+               WHERE kind LIKE 'results%' AND CAST(known_at AT TIME ZONE 'Asia/Kolkata' AS DATE) = ? AND known_at <= ?
+               GROUP BY symbol LIMIT ?""", [d, as_of.ts, limit]).fetchall():
+        out.append({"kind": "results", "code": sym, "text": f"{sym} files {(label or 'results').lower()} results"})
+    for action, sym, company, eff, ann in self.con.execute(
+            """SELECT action, symbol, company, effective_date, announced_date FROM index_event
+               WHERE index_code = 'NIFTY500' AND (effective_date = ? OR announced_date = ?) AND coalesce(announced_date, effective_date) <= ?
+               ORDER BY action LIMIT ?""", [d, d, d, limit]).fetchall():
+        verb = "joins" if action == "in" else "leaves"
+        when = "today" if eff == d else f"on {eff:%d-%b-%Y}"
+        out.append({"kind": "index", "code": sym, "text": f"{company or sym} {verb} the Nifty 500 {when}"})
+    return out
+
+
+def _context(self: PitReader, day: dt.date, before_days: int = 3) -> dict:
+    """Editorial context (Wikipedia) for a session: items dated from day-before_days up to the day itself —
+    never after it. Not point-in-time data: summaries were written later; the UI labels them as such."""
+    rows = self.con.execute(
+        """SELECT day, scope, category, story, text, source_name, source_url, page FROM context_event
+           WHERE day BETWEEN ? AND ? ORDER BY day DESC, scope, category NULLS LAST""",
+        [day - dt.timedelta(days=before_days), day]).fetchall()
+    keys = ["day", "scope", "category", "story", "text", "source_name", "source_url", "page"]
+    items = [dict(zip(keys, r)) for r in rows]
+    return {"world": [x for x in items if x["scope"] == "world"], "india": [x for x in items if x["scope"] == "india"]}
+
+
+PitReader.day_tape = _day_tape  # type: ignore[attr-defined]
+PitReader.context = _context  # type: ignore[attr-defined]
 PitReader.session_map = _session_map  # type: ignore[attr-defined]
 PitReader.ew_path = _ew_path  # type: ignore[attr-defined]
 PitReader.members_fate = _members_fate  # type: ignore[attr-defined]

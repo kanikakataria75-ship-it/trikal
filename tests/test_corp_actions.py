@@ -47,3 +47,15 @@ def test_pct_dividend_uses_face_value():
     p = parse_subject("Dividend - 30%", face_value=10)
     assert p.amount == pytest.approx(3.0)
     assert parse_subject("Dividend - 30%").amount is None  # never guess the face value
+
+
+@pytest.mark.parametrize("subject,factor", [
+    ("Spl-Rs10 To Rs2/Bonus-1:2", 0.2 * 2 / 3),                                    # exchange's own "Spl" abbreviation
+    ("Bonus 1:1 / Face Value Split From 10/- To Face Value 2/-", 0.5 * 0.2),      # spelled-out target face value
+])
+def test_split_spellings_found_in_the_feed(subject, factor):
+    assert parse_subject(subject).static_factor() == pytest.approx(factor)
+
+
+def test_special_dividend_is_not_a_split():
+    assert parse_subject("Special Dividend Rs 5").static_factor() is None

@@ -193,8 +193,19 @@ def _time_machine(a: AsOf, hindsight: bool, before_days: int = 120) -> dict:
             sid = r.resolve(code, a, "NSE")
             lp = r.last_price(sid, a) if sid else None
             if lp and lp[0] == d:
-                marquee.append({"code": code, "close": lp[1]})
-        out = {"market": m, "map": smap, "before": before, "marquee": marquee, "hindsight": None}
+                # the same print expressed in today's shares: every split/bonus applied since (known now; hindsight)
+                f = 1.0
+                for e in r.adjustment_events(sid, AsOf.now(), "NSE"):
+                    if e[4] and e[0] > d:
+                        f *= e[1]
+                marquee.append({"code": code, "close": lp[1], "today_terms": lp[1] * f, "factor": f})
+        try:
+            ctx = r.context(d)
+        except Exception:  # the context table may not exist yet on an older database
+            ctx = {"world": [], "india": []}
+        out = {"market": m, "map": smap, "before": before, "marquee": marquee, "hindsight": None,
+               "tape": r.day_tape(a), "context": {**ctx, "licence": "Wikipedia contributors · CC BY-SA 4.0",
+                                                 "note": "editorial summaries written after the fact; context only"}}
         if hindsight:
             now = AsOf.now()
             after = r.ew_path(ids, d + dt.timedelta(days=1), d + dt.timedelta(days=380), now)[:250]

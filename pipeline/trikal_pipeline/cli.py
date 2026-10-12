@@ -134,6 +134,54 @@ def build() -> None:
     typer.echo(f"adjustment events: {adjustments.build(con)} ({time.monotonic() - t0:.0f}s)")
 
 
+@app.command("adjust")
+def adjust() -> None:
+    """Rebuild only the adjustment events (after a parser or rule change); the security master is untouched."""
+    from trikal_core.db import connect
+    from trikal_pipeline import adjustments
+
+    con = connect()
+    t0 = time.monotonic()
+    typer.echo(f"adjustment events: {adjustments.build(con)} ({time.monotonic() - t0:.0f}s)")
+
+
+@app.command("fetch-context")
+def fetch_context(
+    days: str = typer.Option("events", help="'events' (the Time Machine's historic days +/- 3), 'all', or YYYY-MM-DD:YYYY-MM-DD"),
+) -> None:
+    """Fetch the Wikipedia context layer (world + India events by day) into the raw zone, then load it."""
+    import datetime as dt
+
+    from trikal_core.db import connect, init_schema
+    from trikal_pipeline.http import Fetcher
+    from trikal_pipeline.sources import wiki_context
+
+    today = dt.date.today()
+    if days == "all":
+        start, end = dt.date(1994, 11, 3), today
+    elif ":" in days:
+        a, b = days.split(":")
+        start, end = dt.date.fromisoformat(a), dt.date.fromisoformat(b)
+    else:
+        start = end = None
+    span = [start + dt.timedelta(n) for n in range((end - start).days + 1)] if start else []
+    if not span:  # the Time Machine's built-in days (keep in sync with TM_EVENTS in api/trikal_api/app.py)
+        events = ["1994-11-03", "1998-05-12", "2000-02-29", "2004-05-17", "2006-05-22", "2008-01-21", "2008-10-24",
+                  "2009-05-18", "2013-08-28", "2014-05-16", "2016-06-24", "2016-11-09", "2019-09-20", "2020-03-23",
+                  "2021-02-01", "2023-01-27", "2024-06-04"]
+        span = sorted({dt.date.fromisoformat(e) + dt.timedelta(k) for e in events for k in range(-3, 2)})
+    years = sorted({d.year for d in span} | set(range(1994, today.year + 1)))
+    raw = RawStore()
+    f = Fetcher(timeout=30, retries=2)
+    try:
+        typer.echo(f"fetched: {wiki_context.fetch(f, raw, span, years)}")
+    finally:
+        f.close()
+    con = connect()
+    init_schema(con)
+    typer.echo(f"loaded: {wiki_context.load(con, raw)}")
+
+
 @app.command("show")
 def show(
     code: str,

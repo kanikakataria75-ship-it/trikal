@@ -15,6 +15,7 @@ day in between is UNKNOWN, neither the implied factor nor the observed price rat
 Decision rules (agreement -> applied?):
   match / mismatch       parsed + trusted implied                         -> apply implied (mismatch: DQ)
   parsed_confirmed       parsed; observed close/prev close within PRICE_BAND of the factor  -> apply
+  parsed_confirmed_wide  pure split/bonus; observed within WIDE_BAND (crash/boom day on top)  -> apply, DQ
   parsed_unconfirmed     parsed; no clean observation (gap / unknown days)                 -> apply, DQ
   parsed_price_disagrees parsed; observed move contradicts it                      -> NOT applied, DQ
   implied_confirmed      no announcement; split-sized implied factor that the observed move follows
@@ -38,7 +39,19 @@ from trikal_pipeline.security_master import EQUITY_VIEW
 TOLERANCE = 0.02  # parsed vs implied
 PRICE_BAND = (0.80, 1.25)  # observed ratio / factor must fall inside (normal daily move + circuit)
 JUMP_BAND = (0.60, 1.60)
+WIDE_BAND = (0.55, 1.25)  # pure split/bonus only: widened on the downside for crash days; upside stays PRICE_BAND (a +40% "bonus day" is more likely a wrong ex-date)
 IMPLIED_MIN_FACTOR = 0.80  # exchange-only factors must be at least this far from 1 (|ln f| > ln 1.25)  # beyond any circuit band: needs an explanation
+
+
+_NOT_SHARES = ("debenture", "ncrp", "preference", "scheme of arrangement", "sch of agmt", "demerger", "rights")
+
+
+def _pure_share_action(e: dict) -> bool:
+    """Only a face-value split or a share bonus (no rights, no 'bonus debentures', no scheme) qualifies for the
+    wide band: their factor is exact from the text, so a large same-day move cannot mean a misread ratio."""
+    kinds = set((e["kind"] or "").split("+")) - {"dividend"}
+    subj = (e["subject"] or "").lower()
+    return bool(kinds) and kinds <= {"split", "bonus"} and not any(w in subj for w in _NOT_SHARES)
 
 
 def build(con: duckdb.DuckDBPyConnection) -> dict[str, int]:
@@ -142,6 +155,10 @@ def build(con: duckdb.DuckDBPyConnection) -> dict[str, int]:
                 agreement, applied = "parsed_unconfirmed", True
             elif PRICE_BAND[0] <= obs / par <= PRICE_BAND[1]:
                 agreement, applied = "parsed_confirmed", True
+            elif _pure_share_action(e) and WIDE_BAND[0] <= obs / par <= WIDE_BAND[1]:
+                # a face-value split or share bonus on a crash/boom day (e.g. JINDALSTEL 21-Jan-2008: split 5:1
+                # and -27% the same session). The announcement is authoritative; the move is reported for review.
+                agreement, applied = "parsed_confirmed_wide", True
             else:
                 agreement, applied = "parsed_price_disagrees", False
         elif imp is not None:
@@ -160,7 +177,8 @@ def build(con: duckdb.DuckDBPyConnection) -> dict[str, int]:
             continue  # announced non-static action (e.g. demerger) with no price signal: nothing to apply
         if factor is None or not math.isfinite(factor) or factor <= 0:
             continue
-        if agreement in ("mismatch", "parsed_unconfirmed", "parsed_price_disagrees", "unverifiable", "implied_confirmed"):
+        if agreement in ("mismatch", "parsed_unconfirmed", "parsed_price_disagrees", "unverifiable", "implied_confirmed",
+                         "parsed_confirmed_wide"):
             sev = {"mismatch": "medium", "parsed_price_disagrees": "medium"}.get(agreement, "low")
             dq.append(("adj_" + agreement, e["x"], e["sid"], e["d"],
                        f"implied={imp} parsed={par} observed={obs} suspect={e['suspect']} {e['note']} "

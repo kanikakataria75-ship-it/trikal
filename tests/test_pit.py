@@ -208,3 +208,59 @@ def test_pre_coverage_member_excluded_before_first_effective_date_is_not_a_membe
     r = PitReader(con)
     assert "X:OLD" in {m[0] for m in r.index_members("NIFTY500", AsOf.end_of(D(1999, 1, 15)))}
     assert "X:OLD" not in {m[0] for m in r.index_members("NIFTY500", AsOf.end_of(D(2026, 1, 1)))}
+
+
+def test_last_price_prefers_the_equity_series(con):
+    """Regression: an institutional-lot (IL) print on the same day must not replace the EQ close."""
+    from trikal_core.pit import PitReader
+    from trikal_core.timeutil import AsOf
+
+    insert_many(con, "INSERT INTO listing VALUES (?,?,?,?,?,?,?)", [("S:SBI", "NSE", "SBIX", D(2000, 1, 1), D(2026, 1, 1), "isin", 1.0)])
+    add_prices(con, [("NSE", D(2008, 10, 24), "SBIX", "IL", None, 1245.0, 1336.0),
+                     ("NSE", D(2008, 10, 24), "SBIX", "EQ", None, 1164.75, 1326.25),
+                     ("NSE", D(2008, 10, 24), "SBIX", "N1", None, 99.0, 99.0)])
+    assert PitReader(con).last_price("S:SBI", AsOf.end_of(D(2008, 10, 24))) == (D(2008, 10, 24), 1164.75)
+
+
+def _ca(con, day, subject, kind, fv):
+    con.execute("""INSERT INTO corp_action VALUES ('NSE','FIX','EQ',?, 'Fixture Ltd', ?, ?, NULL, ?,
+                   ?, NULL, NULL, NULL, ?, 'imputed', now(), 'fixture')""", [ISIN, subject, day, fv, kind, at_ist(day, dt.time(9))])
+
+
+def test_split_on_a_crash_day_is_still_applied(con):
+    """Regression (JINDALSTEL 21-Jan-2008): 5:1 split and a -27% session. Observed 0.146 vs factor 0.2."""
+    days = [D(2008, 1, 17), D(2008, 1, 18), D(2008, 1, 21)]
+    add_sessions(con, "NSE", days)
+    add_sessions(con, "NSE", [D(2008, 1, 19), D(2008, 1, 20)], "no_session")
+    add_prices(con, [("NSE", days[0], "FIX", "EQ", ISIN, 15860.45, 15504.75),
+                     ("NSE", days[1], "FIX", "EQ", ISIN, 14363.85, 15860.45),
+                     ("NSE", days[2], "FIX", "EQ", ISIN, 2104.25, 14363.85)])
+    _ca(con, days[2], "Fv Split Rs.5/- To Re.1/-", "split", 1.0)
+    _build_master(con)
+    assert con.execute("SELECT factor, agreement, applied FROM adj_event").fetchall() == [(0.2, "parsed_confirmed_wide", True)]
+
+
+def test_bonus_debentures_never_get_the_wide_band(con):
+    """'Bonus debentures' are debt, not shares: a flat price on the ex-date must keep them unapplied."""
+    days = [D(2010, 3, 4), D(2010, 3, 5), D(2010, 3, 8)]
+    add_sessions(con, "NSE", days)
+    add_sessions(con, "NSE", [D(2010, 3, 6), D(2010, 3, 7)], "no_session")
+    add_prices(con, [("NSE", days[0], "FIX", "EQ", ISIN, 2000.0, 1990.0),
+                     ("NSE", days[1], "FIX", "EQ", ISIN, 2010.0, 2000.0),
+                     ("NSE", days[2], "FIX", "EQ", ISIN, 1865.0, 2010.0)])
+    _ca(con, days[2], "Sch Of Agmt- Bonus Deb1:1", "bonus", 10.0)
+    _build_master(con)
+    assert con.execute("SELECT agreement, applied FROM adj_event").fetchall() == [("parsed_price_disagrees", False)]
+
+
+def test_bonus_day_with_no_price_drop_is_not_applied(con):
+    """Regression (a 2021 case): 'Bonus 1:2' but the price fell only 7% on the ex-date — likely the wrong date.
+    The crash-day widening is downside only, so this stays unapplied for review."""
+    days = [D(2021, 8, 3), D(2021, 8, 4), D(2021, 8, 5)]
+    add_sessions(con, "NSE", days)
+    add_prices(con, [("NSE", days[0], "FIX", "EQ", ISIN, 300.0, 298.0),
+                     ("NSE", days[1], "FIX", "EQ", ISIN, 301.0, 300.0),
+                     ("NSE", days[2], "FIX", "EQ", ISIN, 281.3, 301.0)])
+    _ca(con, days[2], " Bonus 1:2", "bonus", 10.0)
+    _build_master(con)
+    assert con.execute("SELECT agreement, applied FROM adj_event").fetchall() == [("parsed_price_disagrees", False)]

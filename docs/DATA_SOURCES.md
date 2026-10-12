@@ -136,3 +136,22 @@ Rating actions arrive two ways: (a) agency press releases (CRISIL, ICRA, CARE, I
 | `annual-reports` | PDF list per company and year (list only; the PDFs are for M6). | |
 | niftyindices constituent files | Nifty Total Market (755 names) and Microcap 250 carry the NSE sector label per company, current only. | `classification` (FORMULAS.md). |
 | `www.nseindia.com/api/*` | Needs a browser User-Agent and a Referer; read timeouts occur when the laptop sleeps. | The job is resumable and requests keep-awake while it runs. |
+
+## 11. Context layer for the Time Machine (M3, 2026-10-13)
+
+| Source key | URL pattern | Coverage | Licence |
+|---|---|---|---|
+| `wiki.day` | `https://en.wikipedia.org/wiki/Portal:Current_events/<YYYY>_<Month>_<D>?action=raw` | daily pages from 2003 | CC BY-SA 4.0 |
+| `wiki.year` | `https://en.wikipedia.org/wiki/<YYYY>?action=raw` (Events section) | world events by date; used before 2003 | CC BY-SA 4.0 |
+| `wiki.india` | `https://en.wikipedia.org/wiki/<YYYY>_in_India?action=raw` (Events section) | Indian events by date, 1994 onward | CC BY-SA 4.0 |
+
+- robots.txt disallows `/w/` and `/api/` for crawlers but allows `/wiki/`; raw wikitext is fetched from `/wiki/…?action=raw`
+  with a descriptive User-Agent at ≤ 1 request/second, stored in the raw zone, parsed by `trikal_pipeline.sources.wiki_context`
+  into `context_event` (page title + raw sha kept for lineage).
+- **What it is:** editorial summaries written by Wikipedia editors, often after the fact. Daily-page items keep their original
+  outlet ("Reuters", "BBC News", …) and link. **What it is not:** data. It has no `known_at`, it never feeds a metric, score or
+  backtest, and the UI shows only items dated on or before the session on screen, with source and licence.
+- Commands: `trikal fetch-context` (the built-in Time Machine days ±3 + every year page), `trikal fetch-context --days all`
+  (every day from 1994; ~8,700 daily pages, ≈ 2.5 h at the polite rate), `--days 2008-01-01:2008-12-31`.
+- Before public sharing: CC BY-SA requires attribution (shown in the UI) and share-alike for adapted text; we display the text
+  unmodified apart from markup removal.

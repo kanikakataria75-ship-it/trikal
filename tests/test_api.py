@@ -97,3 +97,17 @@ def test_unmatched_index_member_is_unresolved_not_alive(con):
     assert fate == {"U:old_name": "unresolved", "S:LIVE": "alive", "S:DEAD": "gone"}
     st = r.index_strata("NIFTY500", ref, [D(2006, 6, 30)])[0]
     assert (st["members"], st["still_trading"], st["gone"], st["unresolved"]) == (3, 1, 1, 1)
+
+
+def test_split_day_without_code_is_still_excluded_from_movers(con):
+    """Announcement-only adjustment events carry no exchange code; ex-dates must match on the security."""
+    r = PitReader(con)
+    d1 = D(2008, 1, 21)
+    insert_many(con, "INSERT INTO listing VALUES (?,?,?,?,?,?,?)",
+                [(f"S:{c}", "NSE", c, D(2000, 1, 1), D(2026, 1, 1), "isin", 1.0) for c in ("SPL", "AAA")])
+    add_prices(con, [("NSE", d1, "SPL", "EQ", None, 366.05, 1896.9), ("NSE", d1, "AAA", "EQ", None, 95.0, 100.0)])
+    insert_many(con, "INSERT INTO adj_event VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                [("S:SPL", "NSE", None, d1, 0.2, "announcement", None, 0.2, "split", "Fv Split Rs.10/- To Rs.2/",
+                  "parsed_confirmed", True, dt.datetime(2008, 1, 1, tzinfo=dt.timezone.utc), "convention")])
+    m = r.market_day(AsOf.end_of(d1))
+    assert m["securities"] == 1 and m["declines"] == 1

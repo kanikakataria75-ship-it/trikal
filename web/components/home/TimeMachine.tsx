@@ -22,8 +22,10 @@ type TM = Envelope & {
   market: MarketDay;
   map: { session: string; tiles: Tile[]; universe: "nifty500" | "all_equities"; members_total: number };
   before: PathPt[];
-  marquee: { code: string; close: number }[];
+  marquee: { code: string; close: number; today_terms: number; factor: number }[];
   hindsight: null | { after: PathPt[]; m1: number | null; m3: number | null; y1: number | null; sessions: number; still_trading_today: number; members: number; note: string };
+  tape?: { kind: "corporate_action" | "results" | "index"; code: string; text: string }[];
+  context?: { world: Ctx[]; india: Ctx[]; licence: string; note: string };
 };
 
 /* Built-in days. The context line is editorial (what was happening); every number on screen is data. */
@@ -97,8 +99,8 @@ function Gauge({ adv, dec, unch }: { adv: number; dec: number; unch: number }) {
     <div className={s.gauge}>
       <svg viewBox="0 0 180 104" width="100%">
         <path d={L} stroke="rgba(38,43,51,0.9)" strokeWidth={9} fill="none" />
-        <motion.path d={L} stroke="#2EC4B6" strokeWidth={9} fill="none" initial={false} animate={{ pathLength: share }} transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }} />
-        <motion.path d={Rv} stroke="#F0577A" strokeWidth={9} fill="none" initial={false} animate={{ pathLength: 1 - share }} transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }} />
+        <motion.path d={L} stroke="#39FF88" strokeWidth={9} fill="none" initial={false} animate={{ pathLength: share }} transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }} />
+        <motion.path d={Rv} stroke="#FF2E63" strokeWidth={9} fill="none" initial={false} animate={{ pathLength: 1 - share }} transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }} />
         {Array.from({ length: 11 }).map((_, i) => {
           const a = (i / 10) * Math.PI;
           return <line key={i} x1={90 - Math.cos(a) * 60} y1={92 - Math.sin(a) * 60} x2={90 - Math.cos(a) * 55} y2={92 - Math.sin(a) * 55} stroke="#3A414C" strokeWidth={1} />;
@@ -155,16 +157,16 @@ function Path({ before, after, session, y1 }: { before: PathPt[]; after: PathPt[
             <linearGradient id="tm-a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="rgba(212,175,55,0.28)" /><stop offset="1" stopColor="rgba(212,175,55,0)" /></linearGradient>
           </defs>
           {pts.map((p, i) => (
-            <rect key={i} x={X(i) - 0.6} width={1.2} y={p.b >= 0 ? H - 14 - p.b * 10 : H - 14} height={Math.abs(p.b) * 10} fill={p.b >= 0 ? "rgba(46,196,182,0.5)" : "rgba(240,87,122,0.5)"} opacity={p.f ? 0.35 : 0.8} />
+            <rect key={i} x={X(i) - 0.6} width={1.2} y={p.b >= 0 ? H - 14 - p.b * 10 : H - 14} height={Math.abs(p.b) * 10} fill={p.b >= 0 ? "rgba(57,255,136,0.55)" : "rgba(255,46,99,0.55)"} opacity={p.f ? 0.35 : 0.8} />
           ))}
           <path d={area} fill="url(#tm-a)" />
           <motion.path key={session} d={d1} fill="none" stroke="#D4AF37" strokeWidth={1.6} initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1.2 }} />
-          {after && after.length > 0 && <motion.path d={d2} fill="none" stroke={(y1 ?? 0) >= 0 ? "#2EC4B6" : "#F0577A"} strokeWidth={1.4} strokeDasharray="4 3" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1.6, delay: 0.3 }} />}
+          {after && after.length > 0 && <motion.path d={d2} fill="none" stroke={(y1 ?? 0) >= 0 ? "#39FF88" : "#FF2E63"} strokeWidth={1.4} strokeDasharray="4 3" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1.6, delay: 0.3 }} />}
           <line x1={X(today)} x2={X(today)} y1={4} y2={H - 14} stroke="#F2D27A" strokeWidth={1} strokeDasharray="2 2" />
           <circle cx={X(today)} cy={Y(pts[today].v)} r={4} fill="#F2D27A" className={s.here} />
           <text x={X(today) + (today > pts.length * 0.8 ? -8 : 8)} y={14} fill="#F2D27A" fontSize={9.5} letterSpacing="0.16em" textAnchor={today > pts.length * 0.8 ? "end" : "start"}>THIS DAY</text>
           {after && after.length > 0 && (
-            <text x={w - 10} y={Y(pts[pts.length - 1].v) - 8} textAnchor="end" fontSize={10.5} fill={(y1 ?? 0) >= 0 ? "#2EC4B6" : "#F0577A"} className="mono">
+            <text x={w - 10} y={Y(pts[pts.length - 1].v) - 8} textAnchor="end" fontSize={10.5} fill={(y1 ?? 0) >= 0 ? "#39FF88" : "#FF2E63"} className="mono">
               {pct(y1, 0)} a year later · hindsight
             </text>
           )}
@@ -173,6 +175,105 @@ function Path({ before, after, session, y1 }: { before: PathPt[]; after: PathPt[
         </svg>
       )}
     </div>
+  );
+}
+
+type Ctx = { day: string; scope: "world" | "india"; category: string | null; story: string | null; text: string; source_name: string | null; source_url: string | null; page: string };
+
+const wikiUrl = (page: string) => `https://en.wikipedia.org/wiki/${encodeURI(page)}`;
+const shortDate = (iso: string) => dmy(iso).slice(0, 6);
+
+/* ------------------------------------------------------------------ the news lower-third (our own design) */
+function Ticker({ data, session, headline, live }: { data: TM; session: string; headline: string; live: boolean }) {
+  const m = data.market;
+  const isNow = live;
+  const items = useMemo(() => {
+    const out: { tag: string; text: string; tone?: "up" | "down" | "news" | "world" | "india"; src?: string }[] = [];
+    if (m.securities) {
+      out.push({ tag: "BREADTH", text: `${indianGroup(m.advances)} up · ${indianGroup(m.declines)} down · median ${pct(m.median_change, 2)}` });
+      if (m.members_eqw_change !== null) out.push({ tag: "NIFTY 500 EW", text: pct(m.members_eqw_change, 2), tone: m.members_eqw_change >= 0 ? "up" : "down" });
+      for (const x of m.losers.slice(0, 4)) out.push({ tag: x.code, text: `${pct(x.change)} at ₹${x.close.toLocaleString("en-IN")}`, tone: "down" });
+      for (const x of m.gainers.slice(0, 4)) out.push({ tag: x.code, text: `${pct(x.change)} at ₹${x.close.toLocaleString("en-IN")}`, tone: "up" });
+    }
+    for (const x of data.marquee.slice(0, 5)) out.push({ tag: x.code, text: `closes ₹${x.close.toLocaleString("en-IN", { maximumFractionDigits: 2 })}` });
+    for (const t of (data.tape ?? []).slice(0, 10)) out.push({ tag: t.kind === "index" ? "INDEX" : t.kind === "results" ? "RESULTS" : "CORP ACTION", text: t.text, tone: "news" });
+    const exact = (c: Ctx[]) => [...c.filter((x) => x.day === session), ...c.filter((x) => x.day !== session)];
+    const biz = (c: Ctx[]) => [...c.filter((x) => (x.category ?? "").startsWith("Business")), ...c.filter((x) => !(x.category ?? "").startsWith("Business"))];
+    for (const x of exact(data.context?.india ?? []).slice(0, 4)) out.push({ tag: x.day === session ? "INDIA" : `INDIA · ${shortDate(x.day)}`, text: x.text, tone: "india", src: x.source_name ?? "Wikipedia" });
+    for (const x of biz(exact(data.context?.world ?? [])).slice(0, 6)) out.push({ tag: x.day === session ? "WORLD" : `WORLD · ${shortDate(x.day)}`, text: x.text, tone: "world", src: x.source_name ?? "Wikipedia" });
+    return out;
+  }, [data, m, session]);
+  const dur = Math.max(40, items.reduce((a, x) => a + x.text.length + x.tag.length, 0) / 9);  // constant reading speed
+  return (
+    <div className={s.ticker}>
+      <div className={s.tkTop}>
+        <span className={s.tkBug}><i />{isNow ? "LIVE" : "ARCHIVE"}</span>
+        <span className={s.tkDate}>{dmy(session)}</span>
+        <AnimatePresence mode="wait">
+          <motion.b key={headline} initial={{ y: 14, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -14, opacity: 0 }} transition={{ duration: 0.4 }}>{headline}</motion.b>
+        </AnimatePresence>
+        <span className={s.tkBrand}>TRIKAL</span>
+      </div>
+      <div className={s.tkCrawl}>
+        <div key={session} className={s.tkTrack} style={{ animationDuration: `${dur}s` }}>
+          {[...items, ...items].map((x, i) => (
+            <span key={i} className={`${s.tkItem} ${x.tone ? s["tk_" + x.tone] : ""}`}>
+              <em>{x.tag}</em>{x.text}{x.src && <small>· {x.src}</small>}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ the world that day */
+function WorldDrawer({ data, session, onClose }: { data: TM; session: string; onClose: () => void }) {
+  const c = data.context;
+  const group = (xs: Ctx[]) => {
+    const byDay = new Map<string, Ctx[]>();
+    for (const x of xs) byDay.set(x.day, [...(byDay.get(x.day) ?? []), x]);
+    return [...byDay.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+  };
+  const Section = ({ title, xs }: { title: string; xs: Ctx[] }) => (
+    <div className={s.wdSec}>
+      <div className={s.wdHead}>{title}</div>
+      {xs.length === 0 && <div className={s.wdNone}>Nothing recorded for these days.</div>}
+      {group(xs).map(([day, list]) => (
+        <div key={day} className={s.wdDay}>
+          <div className={s.wdDate}>{day === session ? "THAT DAY" : dmy(day)}</div>
+          {list.slice(0, 14).map((x, i) => (
+            <div key={i} className={s.wdItem}>
+              {x.category && <span className={s.wdCat}>{x.category}</span>}
+              <p>{x.text}</p>
+              <div className={s.wdSrc}>
+                {x.source_url && <a href={x.source_url} target="_blank" rel="noreferrer noopener">{x.source_name ?? "source"} ↗</a>}
+                <a href={wikiUrl(x.page)} target="_blank" rel="noreferrer noopener">Wikipedia ↗</a>
+              </div>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+  return (
+    <motion.aside className={s.drawer} initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", stiffness: 260, damping: 32 }}>
+      <div className={s.wdTop}>
+        <div>
+          <span>MEANWHILE</span>
+          <b className="display">The world around {dmy(session)}</b>
+        </div>
+        <button onClick={onClose} aria-label="Close">✕</button>
+      </div>
+      <div className={s.wdScroll}>
+        <Section title="India" xs={c?.india ?? []} />
+        <Section title="World" xs={c?.world ?? []} />
+      </div>
+      <div className={s.wdFoot}>
+        Summaries by {c?.licence ?? "Wikipedia contributors · CC BY-SA 4.0"}. Written after the fact by editors — context, never data:
+        nothing here feeds a number in TRIKAL. Only items dated on or before the session are shown.
+      </div>
+    </motion.aside>
   );
 }
 
@@ -200,7 +301,26 @@ export default function TimeMachine() {
   const [tour, setTour] = useState(false);
   const [custom, setCustom] = useState("");
   const [hover, setHover] = useState<{ p: Placed; x: number; y: number } | null>(null);
+  const [world, setWorld] = useState(false);
   const stage = useRef<HTMLDivElement>(null);
+  const [full, setFull] = useState(false);
+  useEffect(() => {
+    const onFs = () => { if (!document.fullscreenElement) setFull(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setFull(false); };
+    document.addEventListener("fullscreenchange", onFs);
+    window.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("fullscreenchange", onFs); window.removeEventListener("keydown", onKey); };
+  }, []);
+  useEffect(() => { document.body.style.overflow = full ? "hidden" : ""; }, [full]);
+  const toggleFull = async () => {
+    if (full) {
+      if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
+      setFull(false);
+      return;
+    }
+    setFull(true); // covers the window even where the Fullscreen API is blocked (embedded browsers, iframes)
+    try { await stage.current?.requestFullscreen?.(); } catch { /* the CSS fallback stays on */ }
+  };
   const { data, isFetching, error } = useTM(date, hind);
   const m = data?.market;
   const sess = m?.session ?? (date === "NOW" ? todayIST() : date);
@@ -244,36 +364,31 @@ export default function TimeMachine() {
 
   return (
     <section id="market" className={s.section}>
-      <div ref={stage} className={`${s.stage} ${er.cls}`}>
-        <div className={s.city}>
-          {data && <MarketCity tiles={data.map.tiles} mode={mode} arrive={Date.parse(sess)} onPick={(p) => router.push(`/terminal?code=${encodeURIComponent(p.t.code)}&asof=${sess}`)}
-            onHover={(p, x, y) => setHover(p && x !== undefined && y !== undefined ? { p, x, y } : null)} />}
-        </div>
+      <div ref={stage} className={`${s.stage} ${er.cls} ${full ? s.full : ""}`}>
         <div className={s.grade} />
         <div className={s.grain} />
-        <AnimatePresence>
-          <motion.div key={sess} className={s.flash} initial={{ opacity: 0.9 }} animate={{ opacity: 0 }} transition={{ duration: 1.1, ease: "easeOut" }} />
-        </AnimatePresence>
 
-        {/* masthead */}
+        {/* masthead: its own band, never drawn over the city */}
         <header className={s.mast}>
           <div className={s.mastTop}>
             <span>§1 · THE TIME MACHINE</span>
             <span className={s.mastEra}>{er.name}</span>
             <span>{m ? `${indianGroup(m.securities || data!.map.tiles.length)} SECURITIES ON THE TAPE` : "…"}</span>
           </div>
-          <div className={s.mastDate}>
-            <span className={s.weekday}>{WEEKDAY[d.getUTCDay()]}</span>
-            <Roll text={dateText} />
+          <div className={s.mastBody}>
+            <div className={s.mastDate}>
+              <span className={s.weekday}>{WEEKDAY[d.getUTCDay()]}</span>
+              <Roll text={dateText} />
+            </div>
+            <AnimatePresence mode="wait">
+              <motion.div key={sess + headline.h} className={s.headline} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.5, delay: 0.2 }}>
+                <h2 className="display">{headline.h}</h2>
+                <p>{headline.sub}</p>
+                {ev && <p className={s.context}>{ev.c}</p>}
+                {date !== "NOW" && m && m.session !== date && <p className={s.holiday}>No session on {dmy(date)} — showing the last one before it.</p>}
+              </motion.div>
+            </AnimatePresence>
           </div>
-          <AnimatePresence mode="wait">
-            <motion.div key={sess + headline.h} className={s.headline} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.6, delay: 0.25 }}>
-              <h2 className="display">{headline.h}</h2>
-              <p>{headline.sub}</p>
-              {ev && <p className={s.context}>{ev.c}</p>}
-              {date !== "NOW" && m && m.session !== date && <p className={s.holiday}>No session on {dmy(date)} — showing the last one before it.</p>}
-            </motion.div>
-          </AnimatePresence>
         </header>
 
         {/* event rail */}
@@ -290,6 +405,25 @@ export default function TimeMachine() {
           </form>
         </nav>
 
+        {/* the city gets its own clear window */}
+        <div className={`${s.city} ${year < 2000 ? s.tv90 : year < 2008 ? s.tv00 : year < 2014 ? s.tv08 : ""}`}>
+          {year < 2008 && <div className={s.scan} />}
+          {data && <MarketCity tiles={data.map.tiles} mode={mode} arrive={Date.parse(sess)} onPick={(p) => router.push(`/terminal?code=${encodeURIComponent(p.t.code)}&asof=${sess}`)}
+            onHover={(p, x, y) => setHover(p && x !== undefined && y !== undefined ? { p, x, y } : null)} />}
+          <AnimatePresence>
+            <motion.div key={sess} className={s.flash} initial={{ opacity: 0.9 }} animate={{ opacity: 0 }} transition={{ duration: 1.1, ease: "easeOut" }} />
+          </AnimatePresence>
+          {data && <Ticker data={data} session={sess} headline={headline.h} live={date === "NOW"} />}
+          <AnimatePresence>{world && data && <WorldDrawer data={data} session={sess} onClose={() => setWorld(false)} />}</AnimatePresence>
+          <div className={s.cityKey}>
+            <span><i className={s.kUp} />rose · height = size of move</span>
+            <span><i className={s.kDown} />fell · sinks below the floor</span>
+            <span>area = turnover · drag to orbit · scroll to zoom · click a tile</span>
+          </div>
+          {(isFetching || (!data && !error)) && <div className={s.loading}><i />rebuilding {date === "NOW" ? "today" : dmy(date)}…</div>}
+          {error && !data && <div className={s.loading}>Time machine offline — is the API running?</div>}
+        </div>
+
         {/* instrument cluster */}
         <aside className={s.cluster}>
           {m && <Gauge adv={m.advances} dec={m.declines} unch={m.unchanged} />}
@@ -301,11 +435,15 @@ export default function TimeMachine() {
           )}
           {data && data.marquee.length > 0 && (
             <div className={s.prices}>
-              <div className={s.mhead}>Closing prints that day</div>
+              <div className={s.pricesHead}><span>Close that day</span><span>in today’s shares</span></div>
               {data.marquee.map((x) => (
-                <div key={x.code} className={s.mrow}><b className="mono">{x.code}</b><span className="mono">₹{x.close.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</span></div>
+                <div key={x.code} className={s.priceRow} title={x.factor !== 1 ? `Splits & bonuses since: one share then = ${(1 / x.factor).toFixed(x.factor < 0.1 ? 0 : 2)} shares today` : "No split or bonus since"}>
+                  <b className="mono">{x.code}</b>
+                  <span className="mono">₹{x.close.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</span>
+                  <em className="mono">{x.factor !== 1 ? `≈ ₹${x.today_terms.toLocaleString("en-IN", { maximumFractionDigits: x.today_terms < 100 ? 2 : 0 })}` : "same"}</em>
+                </div>
               ))}
-              <i>as printed — before later splits &amp; bonuses</i>
+              <i>Left: the price printed that day. Right: the same money in today’s shares, after every split and bonus since.</i>
             </div>
           )}
           {m && m.gainers.length > 0 && (
@@ -319,8 +457,8 @@ export default function TimeMachine() {
         {/* bottom deck */}
         <div className={s.deck}>
           <div className={s.controls}>
-            <button onClick={() => step(-1)} title="Previous session">◀</button>
-            <button onClick={() => step(1)} title="Next session">▶</button>
+            <button onClick={() => step(-1)} title="Previous session">◀ prev day</button>
+            <button onClick={() => step(1)} title="Next session">next day ▶</button>
             <div className={s.seg}>
               <button className={mode === "open" ? s.segOn : ""} onClick={() => setMode("open")}>09:15 · at the open</button>
               <button className={mode === "close" ? s.segOn : ""} onClick={() => setMode("close")}>15:30 · at the close</button>
@@ -330,7 +468,8 @@ export default function TimeMachine() {
             </button>
             <span className={s.sp} />
             <button className={tour ? s.hindOn : ""} onClick={() => setTour((x) => !x)}>{tour ? "■ Stop tour" : "▶ Tour history"}</button>
-            <button onClick={() => (document.fullscreenElement ? document.exitFullscreen() : stage.current?.requestFullscreen())}>⤢ Full screen</button>
+            <button className={world ? s.hindOn : ""} onClick={() => setWorld((x) => !x)}>☰ The world that day{data?.context ? ` · ${data.context.india.length + data.context.world.length}` : ""}</button>
+            <button onClick={toggleFull}>{full ? "✕ Exit full screen" : "⤢ Full screen"}</button>
           </div>
           <div className={s.deckRow}>
             <div className={s.deckPath}>
@@ -351,11 +490,8 @@ export default function TimeMachine() {
           </div>
         </div>
 
-        {(isFetching || (!data && !error)) && <div className={s.loading}><i />rebuilding {date === "NOW" ? "today" : dmy(date)}…</div>}
-        {error && !data && <div className={s.loading}>Time machine offline — is the API running?</div>}
-
         {hover && (
-          <div className={s.tip} style={{ left: Math.min(hover.x + 16, (typeof window !== "undefined" ? window.innerWidth : 1600) - 280), top: hover.y + 14 }}>
+          <div className={s.tip} style={{ left: Math.min(hover.x + 16, (typeof window !== "undefined" ? window.innerWidth : 1600) - 280), top: Math.min(hover.y + 14, (typeof window !== "undefined" ? window.innerHeight : 900) - 210) }}>
             <div className={s.tipCode}>{hover.p.t.code}<span>{hover.p.t.sector ?? "unclassified"}</span></div>
             <div className={s.tipName}>{hover.p.t.name}</div>
             <div className={s.tipGrid}>
@@ -372,7 +508,7 @@ export default function TimeMachine() {
       <p className={s.foot}>
         Rebuilt from that day’s NSE bhavcopy and the Nifty 500 membership known on that day. Tile area = turnover, height = the day’s move
         (rising above the floor, sinking below it). Sector labels before 2011 are partly reconstructed. <b>†</b> no longer trades today.
-        “What happened next” is computed with today’s data and is drawn apart on purpose. <Link href="/terminal">Open the terminal →</Link>
+        “What happened next” and “in today’s shares” use today’s data on purpose and are labelled. <Link href="/terminal">Open the terminal →</Link>
       </p>
     </section>
   );

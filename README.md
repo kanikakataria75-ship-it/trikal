@@ -59,6 +59,19 @@ run_m2_overnight.cmd                           # double-click (or run in a termi
 .venv/Scripts/trikal show TCS --as-of 2018-06-01
 ```
 
+## Terminal and home page (M3)
+
+Two processes: the read API (every endpoint requires `as_of`) and the web app.
+
+```
+.venv\Scripts\python.exe -m uvicorn trikal_api.app:app --app-dir api --port 8000
+npm --prefix web install      # first time only
+npm --prefix web run dev       # http://localhost:3000  (terminal: /terminal)
+```
+
+The home page's Time Machine also reads the Wikipedia context layer: `trikal fetch-context` (see DATA_SOURCES §11).
+Stop the API before any pipeline command that writes the database (`build`, `adjust`, `refresh-m2`, `fetch-context`).
+
 ## Tests
 
 ```bash

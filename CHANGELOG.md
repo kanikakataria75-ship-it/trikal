@@ -105,3 +105,31 @@ metrics, enforcement mutation-checked (removing the checks fails 2 tests), point
 
 **Honest limits:** values for most companies read "missing X" until the M2 download finishes; the name rules are
 heuristics to review (RISKS R-31); sector operating metrics wait for M5/M6 (R-32); no UI yet.
+
+## M3: Terminal and home page (CODE COMPLETE for review, 2026-10-13)
+
+**Terminal** (`web/`, Next.js + React Three Fiber; API in `api/`)
+- dockview workspace with 11 function panels: DES (identity, playbook, 3D touchstone of the price history), GP (prices with
+  gold verticals for every applied split/bonus), FA (statements with lineage, restated and pre-2018 marks), DUP, CR (Cash
+  River), RV (peers), WC (what changed), OWN, DCF (Valuation Lab: methods the sector allows, labelled assumptions), EVT, HELP.
+- Command bar (`/`, Ctrl+K): `TCS FA`, `ASOF 2008-10-24`, `ASOF -5Y`, history; delisted names searchable.
+- Kaal-Rekha time spine bound to the global as-of; per-panel pinning (then vs now); rewound frame; lineage/dense/CB modes.
+- Read API: every endpoint requires `as_of`, refuses the future, keeps value states (value / n.m. / n/a / forbidden).
+
+**Home page**
+- Touchstone hero: real adjusted price histories drawn as a gold streak on a 3D basalt stone; live NSE tape; command search.
+- Time Machine: any session since 1994 as a 3D city of that day's Nifty 500 members (area = turnover, rising/sinking by the
+  move), open/close morph, breadth gauge, closing prints with today's-share equivalents, the weeks before, labelled hindsight,
+  a news lower-third built from that day's data and exchange announcements, the world and India that week (Wikipedia, CC BY-SA,
+  context only), era TV frames, tour and full-screen modes.
+- Survivorship: every Nifty 500 cohort since 1999 and one cell per real company of a chosen year.
+
+**Data fixes found while building the UI**
+- `last_price` could return an institutional-lot (IL) print instead of the EQ close (e.g. SBIN 24-Oct-2008 ₹1,245 vs ₹1,164.75);
+  this also fed market cap. Fixed with series priority + test.
+- Splits on crash days were rejected (JINDALSTEL 21-Jan-2008: 5:1 split and −27%); a downside-only wide band now applies pure
+  splits/bonuses (`parsed_confirmed_wide`, DQ-logged). Parser now reads "Spl-Rs10 To Rs2" and spelled-out face values.
+- Index survivorship counts separated old index names never matched to a security (`unresolved`) from vanished companies.
+- 134 tests (19 new in M3).
+
+**Pending** run `trikal adjust` once more (≈ 19 min, API stopped) to apply the narrowed wide band (1 event affected).

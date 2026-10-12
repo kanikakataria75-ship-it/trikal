@@ -19,6 +19,7 @@ HOST_INTERVAL = {
     "www.nseindia.com": 1.5,
     "www.niftyindices.com": 1.0,
     "niftyindices.com": 1.0,
+    "en.wikipedia.org": 1.0,
 }
 
 
@@ -64,11 +65,11 @@ class Fetcher:
         rp = self._robots[host]
         return True if rp is None else rp.can_fetch(UA, url)
 
-    def get(self, url: str, referer: str | None = None) -> Response:
+    def get(self, url: str, referer: str | None = None, headers: dict | None = None) -> Response:
         if not self.allowed(url):
             raise PermissionError(f"robots.txt disallows {url}")
         host = urlsplit(url).netloc
-        headers = {"Referer": referer} if referer else {}
+        headers = {**({"Referer": referer} if referer else {}), **(headers or {})}
         last_exc: Exception | None = None
         for attempt in range(self.retries + 1):
             self._wait(host)
