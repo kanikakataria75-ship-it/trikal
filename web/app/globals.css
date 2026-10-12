@@ -131,3 +131,5 @@ button { font: inherit; color: inherit; }
 .city-tag.up span { color: #39ff88; }
 .city-tag.down { border-color: rgba(255, 46, 99, 0.7); box-shadow: 0 0 12px rgba(255, 46, 99, 0.35); }
 .city-tag.down span { color: #ff2e63; }
+.city-ridge { white-space: nowrap; font-size: 10px; letter-spacing: 0.18em; color: rgba(242, 210, 122, 0.7); text-shadow: 0 1px 8px #000; }
+.city-ridge.now { color: #fff3c4; font-weight: 600; padding: 2px 7px; background: rgba(6, 7, 9, 0.7); border: 1px solid rgba(242, 210, 122, 0.6); }

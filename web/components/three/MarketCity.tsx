@@ -272,21 +272,162 @@ function Rig({ arrive }: { arrive: number }) {
     c.update();
   });
   return (
-    <OrbitControls ref={ctl} makeDefault target={[0, -0.3, 0.6]} enableDamping dampingFactor={0.08} autoRotate autoRotateSpeed={0.25}
+    <OrbitControls ref={ctl} makeDefault target={[0, -0.2, -1.0]} enableDamping dampingFactor={0.08} autoRotate autoRotateSpeed={0.25}
       minPolarAngle={0.35} maxPolarAngle={1.18} minDistance={7} maxDistance={24} enablePan={false}
       onStart={() => { touched.current = true; }} />
   );
 }
 
-export default function MarketCity({ tiles, mode, arrive, onHover, onPick }: {
+/* ---------- the land around the city ---------- */
+/* Mood of the day: wine on a fall, teal on a rise, ink when flat. Used for ground tint, sky and fog. */
+function moodColors(mood: number) {
+  const a = Math.min(1, Math.abs(mood) / 0.04);
+  const base = new THREE.Color("#0b1018");
+  const tint = new THREE.Color(mood < 0 ? "#3d0716" : "#063326");
+  return { horizon: base.clone().lerp(tint, a), ground: new THREE.Color("#07080b").lerp(tint, a * 0.35) };
+}
+
+/* A survey map under the city: gold contour lines of a slow, drifting relief. Purely decorative (no data),
+   masked under the city floor and fading into the distance. */
+function TopoGround({ mood }: { mood: number }) {
+  const mat = useMemo(() => new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false,
+    uniforms: { uTime: { value: 0 }, uTint: { value: new THREE.Color() }, uHalf: { value: new THREE.Vector2(W / 2 + 0.45, D / 2 + 0.45) } },
+    vertexShader: `varying vec2 vP; void main(){ vec4 w = modelMatrix * vec4(position,1.0); vP = w.xz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: `
+      uniform float uTime; uniform vec3 uTint; uniform vec2 uHalf; varying vec2 vP;
+      float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float n2(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f*f*(3.0-2.0*f);
+        return mix(mix(h2(i), h2(i+vec2(1,0)), u.x), mix(h2(i+vec2(0,1)), h2(i+vec2(1,1)), u.x), u.y); }
+      float fbm(vec2 p){ float s = 0.0, a = 0.5; for (int i = 0; i < 5; i++){ s += a * n2(p); p *= 2.03; a *= 0.5; } return s; }
+      void main(){
+        vec2 q = vP * 0.075 + vec2(uTime * 0.006, -uTime * 0.004);
+        float h = fbm(q + fbm(q * 0.7) * 0.6);
+        float k = h * 14.0;
+        float w = fwidth(k);
+        float line = 1.0 - smoothstep(w * 0.6, w * 1.6, min(fract(k), 1.0 - fract(k)));
+        float major = 1.0 - smoothstep(w * 0.6, w * 1.8, min(fract(k / 5.0), 1.0 - fract(k / 5.0)) * 5.0);
+        vec2 d = abs(vP) - uHalf;
+        float outside = smoothstep(0.0, 1.2, max(d.x, d.y));            // nothing under the city floor
+        float r = length(vP);
+        float fade = 1.0 - smoothstep(16.0, 34.0, r);
+        vec3 gold = vec3(0.83, 0.68, 0.22);
+        vec3 col = uTint + gold * (line * 0.22 + major * 0.45);
+        float alpha = (0.85 + line * 0.1) * outside * fade;
+        gl_FragColor = vec4(col, alpha);
+      }`,
+  }), []);
+  useEffect(() => { mat.uniforms.uTint.value.copy(moodColors(mood).ground); }, [mood, mat]);
+  useFrame((s) => { mat.uniforms.uTime.value = s.clock.elapsedTime; });
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.04, 0]} material={mat} renderOrder={0}>
+      <planeGeometry args={[90, 90, 1, 1]} />
+    </mesh>
+  );
+}
+
+/* The months before, as a mountain range behind the city: the equal-weight path of that day's members
+   (real data), with a gold rim and a beam of light standing on "this day". */
+export type BeaconFn = (x: number, y: number, visible: boolean) => void;
+
+function Ridge({ levels, mood, onBeacon }: { levels: number[]; mood: number; onBeacon?: BeaconFn }) {
+  const { camera, size } = useThree();
+  const proj = useMemo(() => new THREE.Vector3(), []);
+  const built = useMemo(() => {
+    if (levels.length < 5) return null;
+    const lo = Math.min(...levels), hi = Math.max(...levels);
+    const n = levels.length;
+    // just behind the city, low enough to stay in frame from the default camera: four months back on the left,
+    // this day on the right
+    const z0 = -(D / 2 + 1.6);
+    const pts = levels.map((v, i) => {
+      const u = i / (n - 1);
+      const x = -W / 2 + 0.3 + u * (W - 0.6);
+      const bend = Math.pow(Math.abs(u - 0.5) * 2, 2) * 0.9;
+      const y = 0.3 + ((v - lo) / Math.max(1e-9, hi - lo)) * 2.3;
+      return new THREE.Vector3(x, y, z0 + bend);
+    });
+    const pos: number[] = [], al: number[] = [], idx: number[] = [];
+    pts.forEach((p, i) => {
+      pos.push(p.x, p.y, p.z, p.x, -0.05, p.z);
+      al.push(1, 0);
+      if (i < n - 1) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
+    });
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute("aTop", new THREE.Float32BufferAttribute(al, 1));
+    g.setIndex(idx);
+    const rim = new THREE.BufferGeometry().setFromPoints(pts);
+    const rimLine = new THREE.Line(rim, new THREE.LineBasicMaterial({ color: new THREE.Color(2.4, 1.9, 0.7), toneMapped: false }));
+    return { g, rimLine, end: pts[n - 1], start: pts[0], lo, hi, first: levels[0], last: levels[n - 1] };
+  }, [levels]);
+  const fill = useMemo(() => new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    uniforms: { uTint: { value: new THREE.Color() } },
+    vertexShader: `attribute float aTop; varying float vTop; void main(){ vTop = aTop; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    fragmentShader: `uniform vec3 uTint; varying float vTop; void main(){ vec3 c = mix(uTint * 0.6, uTint * 2.4 + vec3(0.16,0.12,0.04), pow(vTop, 1.5)); gl_FragColor = vec4(c, 0.35 + vTop * 0.55); }`,
+  }), []);
+  useEffect(() => { fill.uniforms.uTint.value.copy(moodColors(mood).horizon); }, [mood, fill]);
+  const beam = useRef<THREE.Mesh>(null);
+  useFrame((s) => {
+    if (beam.current) (beam.current.material as THREE.MeshBasicMaterial).opacity = 0.22 + Math.sin(s.clock.elapsedTime * 2) * 0.06;
+    // project the beacon to the canvas so a plain DOM label can follow it (no per-frame React renders)
+    if (onBeacon && built) {
+      proj.copy(built.end); proj.y += 0.35; proj.project(camera);
+      onBeacon((proj.x * 0.5 + 0.5) * size.width, (-proj.y * 0.5 + 0.5) * size.height, proj.z < 1 && Math.abs(proj.x) < 1.05 && Math.abs(proj.y) < 1.05);
+    }
+  });
+  if (!built) return null;
+  return (
+    <group>
+      <mesh geometry={built.g} material={fill} />
+      <primitive object={built.rimLine} />
+      <mesh ref={beam} position={[built.end.x, built.end.y + 1.6, built.end.z]}>
+        <cylinderGeometry args={[0.04, 0.14, 3.2, 16, 1, true]} />
+        <meshBasicMaterial color={new THREE.Color(2.2, 1.8, 0.7)} transparent opacity={0.25} toneMapped={false} depthWrite={false} side={THREE.DoubleSide} />
+      </mesh>
+      <mesh position={built.end}>
+        <sphereGeometry args={[0.11, 20, 20]} />
+        <meshBasicMaterial color={new THREE.Color(3, 2.4, 1)} toneMapped={false} />
+      </mesh>
+    </group>
+  );
+}
+
+/* For low orbits: a sky that carries the day's mood down to the horizon. */
+function Sky({ mood }: { mood: number }) {
+  const mat = useMemo(() => new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite: false, fog: false,
+    uniforms: { uH: { value: new THREE.Color() }, uZ: { value: new THREE.Color("#040507") } },
+    vertexShader: `varying vec3 vD; void main(){ vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    fragmentShader: `uniform vec3 uH; uniform vec3 uZ; varying vec3 vD; void main(){ float t = smoothstep(-0.05, 0.55, vD.y); vec3 c = mix(uH * 1.3, uZ, t); c += uH * exp(-pow((vD.y - 0.03) * 14.0, 2.0)) * 0.6; gl_FragColor = vec4(c, 1.0); }`,
+  }), []);
+  useEffect(() => { mat.uniforms.uH.value.copy(moodColors(mood).horizon); }, [mood, mat]);
+  return <mesh material={mat}><sphereGeometry args={[70, 32, 16]} /></mesh>;
+}
+
+function MoodFog({ mood }: { mood: number }) {
+  const { scene } = useThree();
+  useEffect(() => {
+    const c = moodColors(mood).horizon.clone().multiplyScalar(0.55);
+    scene.fog = new THREE.Fog(c, 22, 48);
+    scene.background = c;
+  }, [mood, scene]);
+  return null;
+}
+
+export default function MarketCity({ tiles, mode, arrive, onHover, onPick, ridge = [], mood = 0, onBeacon }: {
   tiles: Tile[]; mode: "close" | "open"; arrive: number;
   onHover: (p: Placed | null, x?: number, y?: number) => void; onPick: (p: Placed) => void;
+  ridge?: number[]; mood?: number; onBeacon?: BeaconFn;
 }) {
   const { placed, districts } = useMemo(() => layoutCity(tiles), [tiles]);
   return (
-    <Canvas dpr={[1, 1.5]} flat camera={{ position: [0, 13.5, 9.5], fov: 36, near: 0.1, far: 80 }} gl={{ antialias: true, powerPreference: "high-performance" }}>
-      <color attach="background" args={["#060709"]} />
-      <fog attach="fog" args={["#060709", 20, 40]} />
+    <Canvas dpr={[1, 1.5]} flat camera={{ position: [0, 11.2, 12.8], fov: 38, near: 0.1, far: 160 }} gl={{ antialias: true, powerPreference: "high-performance" }}>
+      <MoodFog mood={mood} />
+      <Sky mood={mood} />
+      <TopoGround mood={mood} />
+      <Ridge levels={ridge} mood={mood} onBeacon={onBeacon} />
       <Environment resolution={128} frames={1}>
         <Lightformer form="rect" intensity={2.4} color="#fff1d2" position={[0, 8, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[16, 6, 1]} />
         <Lightformer form="rect" intensity={1.0} color="#d4af37" position={[-10, 2, 4]} rotation={[0, Math.PI / 2, 0]} scale={[10, 2, 1]} />

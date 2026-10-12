@@ -58,11 +58,22 @@ function defaultLayout(api: DockviewApi) {
   api.getPanel("DUP")?.api.setActive();
   api.getPanel("FA")?.api.setActive();
   api.getPanel("RV")?.api.setActive();
-  try {
-    const w = api.width;
-    api.getPanel("DES")?.group.api.setSize({ width: Math.round(w * 0.3) });
-    api.getPanel("DUP")?.group.api.setSize({ width: Math.round(w * 0.3) });
-  } catch { /* sizing is cosmetic */ }
+  // the price chart is the centre of the desk: about half the width and two thirds of the height
+  const size = () => {
+    try {
+      const w = api.width, h = api.height;
+      if (!w || !h) return false;
+      api.getPanel("DES")?.group.api.setSize({ width: Math.round(w * 0.24) });
+      api.getPanel("DUP")?.group.api.setSize({ width: Math.round(w * 0.26) });
+      api.getPanel("GP")?.group.api.setSize({ height: Math.round(h * 0.66) });
+      api.getPanel("DUP")?.group.api.setSize({ height: Math.round(h * 0.55) });
+      return true;
+    } catch { return true; /* sizing is cosmetic */ }
+  };
+  size();
+  // dockview finishes measuring after the first frames: apply again once the grid has settled
+  setTimeout(size, 80);
+  setTimeout(size, 400);
 }
 
 function Header() {

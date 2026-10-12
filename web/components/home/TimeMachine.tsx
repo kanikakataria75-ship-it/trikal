@@ -302,6 +302,13 @@ export default function TimeMachine() {
   const [custom, setCustom] = useState("");
   const [hover, setHover] = useState<{ p: Placed; x: number; y: number } | null>(null);
   const [world, setWorld] = useState(false);
+  const beacon = useRef<HTMLDivElement>(null);
+  const onBeacon = useCallback((x: number, y: number, visible: boolean) => {
+    const el = beacon.current;
+    if (!el) return;
+    el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -100%)`;
+    el.style.opacity = visible ? "1" : "0";
+  }, []);
   const stage = useRef<HTMLDivElement>(null);
   const [full, setFull] = useState(false);
   useEffect(() => {
@@ -359,6 +366,12 @@ export default function TimeMachine() {
     return { h, sub: `${idx}${big ? ` · biggest move ${big.code} ${pct(big.change)}` : ""}` };
   }, [m, data]);
 
+  // the months before as index levels (equal weight, that day's members) — the ridge behind the city
+  const ridge = useMemo(() => {
+    let v = 100;
+    return (data?.before ?? []).map((p) => (v *= 1 + (p.r ?? 0)));
+  }, [data]);
+
   const d = new Date(sess + "T00:00:00Z");
   const dateText = `${String(d.getUTCDate()).padStart(2, "0")} ${MONTH[d.getUTCMonth()].slice(0, 3)} ${d.getUTCFullYear()}`;
 
@@ -408,8 +421,15 @@ export default function TimeMachine() {
         {/* the city gets its own clear window */}
         <div className={`${s.city} ${year < 2000 ? s.tv90 : year < 2008 ? s.tv00 : year < 2014 ? s.tv08 : ""}`}>
           {year < 2008 && <div className={s.scan} />}
-          {data && <MarketCity tiles={data.map.tiles} mode={mode} arrive={Date.parse(sess)} onPick={(p) => router.push(`/terminal?code=${encodeURIComponent(p.t.code)}&asof=${sess}`)}
+          {data && <MarketCity tiles={data.map.tiles} mode={mode} arrive={Date.parse(sess)} ridge={ridge} mood={m?.members_eqw_change ?? m?.median_change ?? 0} onBeacon={onBeacon} onPick={(p) => router.push(`/terminal?code=${encodeURIComponent(p.t.code)}&asof=${sess}`)}
             onHover={(p, x, y) => setHover(p && x !== undefined && y !== undefined ? { p, x, y } : null)} />}
+          {ridge.length > 4 && (
+            <div ref={beacon} className={s.beacon}>
+              <b>THIS DAY</b>
+              <span className={ridge[ridge.length - 1] >= ridge[0] ? "pos" : "neg"}>{pct(ridge[ridge.length - 1] / ridge[0] - 1)}</span>
+              <i>over the 4 months before · the ridge behind</i>
+            </div>
+          )}
           <AnimatePresence>
             <motion.div key={sess} className={s.flash} initial={{ opacity: 0.9 }} animate={{ opacity: 0 }} transition={{ duration: 1.1, ease: "easeOut" }} />
           </AnimatePresence>

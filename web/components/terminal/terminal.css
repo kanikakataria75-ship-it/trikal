@@ -197,7 +197,7 @@
 
 /* ---------- GP ---------- */
 .gp { display: flex; flex-direction: column; }
-.gp-chart { flex: 1; min-height: 220px; position: relative; }
+.gp-chart { flex: 1; min-height: 320px; position: relative; }
 .gp > .t-empty, .gp > div:not(.t-toolbar):not(.t-foot) { flex: 1; min-height: 0; }
 .gp-read { margin-left: auto; font-size: 11px; color: var(--fg-2); }
 .gp-read b { color: var(--fg-0); font-weight: 500; margin-left: 4px; }
@@ -301,13 +301,13 @@
 @media (max-width: 900px) { .des-hero, .pb-cols, .wc-grid, .lab { grid-template-columns: 1fr; } }
 
 /* GP: corporate-action verticals */
-.gp-events { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: -2px 0 8px; }
+.gp-events { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: -2px 0 8px; flex: none !important; }
 .gp-events .t-k { margin: 0 4px 0 0; }
 .gp-events button { display: inline-flex; align-items: center; gap: 6px; background: rgba(212, 175, 55, 0.05); border: 1px solid rgba(212, 175, 55, 0.25); border-radius: 3px; padding: 2px 8px; font-family: var(--font-mono); font-size: 10.5px; color: var(--fg-1); cursor: pointer; }
 .gp-events button:hover { border-color: var(--gold-1); color: var(--fg-0); }
 .gp-events button i { width: 6px; height: 6px; background: var(--gold-0); transform: rotate(45deg); }
 .gp-events button b { color: var(--gold-0); font-weight: 500; }
-.gp-wrap { position: relative; flex: 1; min-height: 220px; display: flex; }
+.gp-wrap { position: relative; flex: 1; min-height: 320px; display: flex; }
 .gp-wrap .gp-chart { flex: 1; }
 .gp-lines { position: absolute; inset: 0 60px 26px 0; pointer-events: none; overflow: hidden; }
 .gp-line { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed rgba(242, 210, 122, 0.55); }
