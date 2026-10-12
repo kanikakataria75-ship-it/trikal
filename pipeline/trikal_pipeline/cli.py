@@ -197,6 +197,67 @@ def fetch_m2(symbols_file: str = typer.Option("data/pilot_symbols.txt"),
     run_overnight(symbols_file, since)
 
 
+@app.command("parse-financials")
+def parse_financials(limit: int = typer.Option(0, help="parse at most N new documents (0 = all)")) -> None:
+    """Parse downloaded results documents into filing / fact_financial_all, then rebuild fact_financial."""
+    from trikal_core.db import connect, init_schema
+    from trikal_pipeline import load_financials as lf
+
+    con, raw = connect(), RawStore()
+    init_schema(con)
+    t0 = time.monotonic()
+    for kind in lf.KINDS:
+        typer.echo(f"{kind}: {lf.load_results(con, raw, kind, limit=limit or None)}  ({time.monotonic() - t0:.0f}s)")
+    typer.echo(f"fact_financial rows (value changes only): {lf.build_financials(con):,}")
+
+
+@app.command("parse-ownership")
+def parse_ownership() -> None:
+    """Load shareholding patterns (list summary + SHP XBRL), pledge snapshots and sector classification."""
+    from trikal_core.db import connect, init_schema
+    from trikal_pipeline import classification, shp
+
+    con, raw = connect(), RawStore()
+    init_schema(con)
+    typer.echo(f"shareholding: {shp.load_shareholding(con, raw)}")
+    typer.echo(f"pledge: {shp.load_pledge(con, raw)}")
+    typer.echo(f"classification: {classification.build(con)}")
+
+
+@app.command("check-financials")
+def check_financials() -> None:
+    """Run accounting-identity checks over parsed financials and report pass rates."""
+    from trikal_core.db import connect
+    from trikal_pipeline import quality
+
+    for name, n, ok, share in quality.run(connect()):
+        typer.echo(f"{name:45s} checked={n:6d} ok={ok:6d} pass={'n/a' if share is None else f'{share:.1%}'}")
+
+
+@app.command("refresh-m2")
+def refresh_m2() -> None:
+    """Parse everything downloaded so far, run the identity checks and rewrite the coverage report."""
+    from trikal_core.db import connect, init_schema
+    from trikal_pipeline import classification, coverage as cov, quality, shp
+    from trikal_pipeline import load_financials as lf
+
+    con, raw = connect(), RawStore()
+    init_schema(con)
+    for kind in lf.KINDS:
+        typer.echo(f"{kind}: {lf.load_results(con, raw, kind)}")
+    typer.echo(f"fact_financial rows: {lf.build_financials(con):,}")
+    typer.echo(f"shareholding: {shp.load_shareholding(con, raw)}")
+    typer.echo(f"pledge: {shp.load_pledge(con, raw)}")
+    typer.echo(f"classification: {classification.build(con)}")
+    for name, n, ok, share in quality.run(con):
+        typer.echo(f"  check {name}: {ok}/{n} ({'n/a' if share is None else f'{share:.1%}'})")
+    from pathlib import Path
+
+    Path("docs/reports").mkdir(parents=True, exist_ok=True)
+    Path("docs/reports/coverage.md").write_text(cov.report(con), encoding="utf-8")
+    typer.echo("wrote docs/reports/coverage.md")
+
+
 @app.command("raw-status")
 def raw_status() -> None:
     """Summarise the raw zone fetch log."""

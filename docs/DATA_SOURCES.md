@@ -120,3 +120,19 @@ Rating actions arrive two ways: (a) agency press releases (CRISIL, ICRA, CARE, I
 | `niftyindices` snapshots | Official constituent files can contain **placeholder rows** during corporate actions (e.g. `DUMMYHEG`, "Dummy HEG Ltd.", ISIN `DUM545A01024`, Oct-2026), and **REIT units** (Nifty 500 includes REITs from 30-Sep-2026). | Placeholders excluded and logged; REIT constituents identified by symbol → ISIN. |
 | Press releases | Changes can be **voided, deferred or revoked** in later free-text releases (27-Mar-2020 rebalance voided on 13-May-2020; Vodafone Idea exclusion revoked 25-Sep-2024, Prism Johnson excluded instead). | Curated, cited overrides in `config/index_overrides.yaml`. |
 | Press releases | Before ~2011 lists give company names only, often followed by the industry ("Munjal Showa Ltd. Auto Ancillaries"); pre-2010 PDFs are web-page printouts with navigation text mixed in. | Name matching with confidence; navigation text stripped. |
+
+---
+
+## 10. Findings during M2 ingestion (2026-10-12)
+
+| Source | Finding | Consequence |
+|---|---|---|
+| `nse.results` list (`corporates-financial-results`) | Up to ~160 rows per company back to 2005; each row has an exact `broadCastDate`. XBRL links (`…/xbrl/*.xml`) exist only from period-end Jun-2017; earlier rows have `xbrl/-` and an HTML `resultDetailedDataLink` instead. Some old periods were re-broadcast years later (TCS FY16 in 2018). | Two parsers; the earliest-known value of an unchanged figure is kept (value-change PIT table). |
+| `integrated-filing-results?index=equities&symbol=X&size=500` | New SEBI "Integrated Filing" endpoint carrying results from the Dec-2024 quarter (the old endpoint stops there). It also lists "Governance" documents (about 40% of rows) that are not financial statements. Paged at 20 rows unless `size` is given. | Added to the downloader; Governance rows filtered by `type`. |
+| Results XBRL | Context ids encode the column (`OneD`, `FourD`); `FourD` dates are the quarter's, not the year's. Values in full rupees. Annual and half-yearly filings include balance sheet and cash flow. Families: `INDAS`, `BANKING`, `NBFC_INDAS`, `NONINDAS`, `INTEGRATED`. | FORMULAS.md, Financial statements. Banks expose NPA amounts and ROA but no loan-book or NIM concepts. |
+| Old results HTML | Labels vary by company and year; amounts in ₹ lakh; "Total expenses" sometimes includes finance costs and sometimes not; Part II "Number of shares" rows are rendered one group earlier than their headers. | Lossless `html:<slug>` facts, validated Part II, convention-tolerant identity check. |
+| `corporate-share-holdings-master` | Returns only the latest ~20 quarters (since Sep-2021) regardless of date parameters. Revised records replace the original (its values and broadcast time are not retained). SHP XBRL is 0.3–1.3 MB each; context naming changed between 2018, 2023 and 2025; the percentage scale varies (fraction vs percent). | Normalising parser. Shareholding before Sep-2021 is limited to the promoter/public summary (RISKS R-27). |
+| `corporate-pledgedata` | Latest quarter only; `from_date`, `to_date`, `size` and `period_ended` do not return history. | Forward-accumulating snapshots (RISKS R-26). |
+| `annual-reports` | PDF list per company and year (list only; the PDFs are for M6). | |
+| niftyindices constituent files | Nifty Total Market (755 names) and Microcap 250 carry the NSE sector label per company, current only. | `classification` (FORMULAS.md). |
+| `www.nseindia.com/api/*` | Needs a browser User-Agent and a Referer; read timeouts occur when the laptop sleeps. | The job is resumable and requests keep-awake while it runs. |

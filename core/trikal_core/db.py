@@ -11,7 +11,7 @@ from pathlib import Path
 
 import duckdb
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def data_dir() -> Path:
@@ -141,6 +141,74 @@ CREATE TABLE IF NOT EXISTS index_membership (
 );
 CREATE TABLE IF NOT EXISTS index_count_check (
     index_code VARCHAR, effective_date DATE, expected INTEGER, reconstructed INTEGER, ok BOOLEAN, note VARCHAR
+);
+
+-- ---- M2: fundamentals & ownership -------------------------------------------------------------------
+
+-- One row per filed document (results XBRL / old results HTML / shareholding XBRL).
+CREATE TABLE IF NOT EXISTS filing (
+    filing_id VARCHAR PRIMARY KEY,           -- document URL
+    kind VARCHAR,                            -- results_xbrl | results_html | shp_xbrl
+    symbol VARCHAR, security_id VARCHAR,
+    family VARCHAR,                          -- INDAS | BANKING | NBFC_INDAS | NONINDAS | INTEGRATED | HTML | SHP
+    basis VARCHAR,                           -- standalone | consolidated
+    period_start DATE, period_end DATE,      -- reporting period of the filing (YTD range for results)
+    fy_start DATE,
+    period_label VARCHAR,                    -- First quarter .. Yearly
+    audited VARCHAR, rounding VARCHAR,
+    known_at TIMESTAMPTZ, known_precision VARCHAR,
+    revision_flag VARCHAR,                   -- raw reInd / type_Sub / revised_Date from the exchange list
+    source_sha VARCHAR, recorded_at TIMESTAMPTZ
+);
+
+-- Every numeric fact of every results filing, as reported (units: INR / shares / ratios, see `unit`).
+-- Bitemporal: (period_start, period_end) = valid time, known_at = filing broadcast time.
+CREATE TABLE IF NOT EXISTS fact_financial_all (
+    filing_id VARCHAR, security_id VARCHAR, basis VARCHAR,
+    concept VARCHAR,                         -- XBRL taxonomy concept (HTML labels are mapped to the same names)
+    dims VARCHAR,                            -- '' for the consolidated line, else 'dimension=member;...' (segments)
+    col VARCHAR,                             -- XBRL column: One = current period, Four = year-to-date
+    period_start DATE, period_end DATE, is_instant BOOLEAN, period_months INTEGER,
+    value DOUBLE, unit VARCHAR,
+    known_at TIMESTAMPTZ, known_precision VARCHAR, source_sha VARCHAR
+);
+
+-- The PIT view of the above: a row is kept only when its value differs from the previously known
+-- value for the same key, so comparatives re-stating an unchanged number add no rows while real
+-- restatements do. Rebuilt by `trikal build-financials`.
+CREATE TABLE IF NOT EXISTS fact_financial (
+    security_id VARCHAR, basis VARCHAR, concept VARCHAR, dims VARCHAR,
+    period_start DATE, period_end DATE, is_instant BOOLEAN, period_months INTEGER,
+    value DOUBLE, unit VARCHAR,
+    known_at TIMESTAMPTZ, known_precision VARCHAR, filing_id VARCHAR, source_sha VARCHAR,
+    is_restated BOOLEAN                      -- true when an earlier-known row had a different value
+);
+
+-- Quarterly shareholding pattern: summary from the list API + category rows from the SHP XBRL.
+CREATE TABLE IF NOT EXISTS shareholding (
+    security_id VARCHAR, period_end DATE,
+    category VARCHAR,                        -- PROMOTER | PUBLIC | MF | FPI | INSURANCE | ... (see shp.py)
+    holders BIGINT, shares DOUBLE, pct DOUBLE,   -- pct in percent (71.77 = 71.77%)
+    known_at TIMESTAMPTZ, known_precision VARCHAR, revision_flag VARCHAR,
+    filing_id VARCHAR, source_sha VARCHAR
+);
+
+-- Promoter pledge disclosures. The exchange API only returns the latest quarter, so history can only
+-- accumulate forward from the first fetch (RISKS R-26).
+CREATE TABLE IF NOT EXISTS pledge_snapshot (
+    security_id VARCHAR, as_on DATE,
+    promoter_pct DOUBLE, pledged_pct_of_promoter DOUBLE, pledged_pct_of_total DOUBLE,
+    shares_pledged DOUBLE, promoter_shares DOUBLE, total_shares DOUBLE,
+    known_at TIMESTAMPTZ, known_precision VARCHAR, fetched_at TIMESTAMPTZ, source_sha VARCHAR
+);
+
+-- Sector classification with explicit method and confidence (RISKS R-3).
+CREATE TABLE IF NOT EXISTS classification (
+    security_id VARCHAR, scheme VARCHAR,     -- NSE_INDUSTRY (current IIC sector-level) | NSE_LEGACY (pre-2011 press-release industry)
+    code VARCHAR,
+    valid_from DATE, valid_to DATE,          -- [valid_from, valid_to); 9999-12-31 = open
+    known_at TIMESTAMPTZ, method VARCHAR,    -- official_snapshot | press_release | assumed_static_backward
+    confidence DOUBLE, source VARCHAR
 );
 
 -- Data-quality issues: anything we could not resolve is recorded, never patched silently.

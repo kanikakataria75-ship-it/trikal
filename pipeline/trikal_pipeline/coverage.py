@@ -17,6 +17,28 @@ def _table(rows, headers) -> str:
 TARGET_START = {"NSE": dt.date(1994, 11, 1), "BSE": dt.date(2007, 1, 1)}
 
 
+def download_progress() -> str:
+    """Raw-zone progress for the M2 documents against what the downloaded lists say should exist."""
+    import datetime as _dt
+
+    from trikal_pipeline.raw import RawStore
+    from trikal_pipeline.sources.nse_company import LISTS, result_docs, shp_docs
+
+    raw = RawStore()
+    pilot = len([x for x in open("data/pilot_symbols.txt", encoding="utf-8")]) if __import__("os").path.exists("data/pilot_symbols.txt") else 0
+    done_lists = {k: len(raw.done_partitions(k)) for k in LISTS}
+    rows = [("company lists (5 endpoints x symbols)", sum(done_lists.values()), pilot * len(LISTS))]
+    docs = result_docs(raw, _dt.date(2011, 4, 1))
+    for label, kind, key in (("results XBRL documents", "xbrl", "nse.xbrl.results"),
+                              ("old results HTML pages", "html", "nse.results.html")):
+        want = {u for _, u, k in docs if k == kind}
+        have = want & raw.done_partitions(key)
+        rows.append((label + " (listed so far)", len(have), len(want)))
+    want = {u for _, u, _k in shp_docs(raw)}
+    rows.append(("shareholding XBRL documents (listed so far)", len(want & raw.done_partitions("nse.xbrl.shp")), len(want)))
+    return _table(rows, ["raw download", "answered", "known to exist"])
+
+
 def report(con: duckdb.DuckDBPyConnection) -> str:
     q = lambda sql, p=None: con.execute(sql, p or []).fetchall()  # noqa: E731
     parts = [f"# TRIKAL data coverage — generated {dt.datetime.now():%Y-%m-%d %H:%M} IST", ""]
@@ -67,6 +89,35 @@ def report(con: duckdb.DuckDBPyConnection) -> str:
                 FROM index_event GROUP BY 1 ORDER BY 1""")
     parts += ["Events by year (unresolved = name not matched to a security; superseded = revised/voided):", "",
               _table(rows, ["year", "events", "unresolved", "with symbol", "superseded"]), ""]
+
+    parts += ["## Fundamentals & ownership (M2)", "",
+              "The 'known to exist' counts only cover companies whose filing lists have been downloaded so far.", "",
+              download_progress(), ""]
+    rows = q("""SELECT kind, family, count(*)::INT, count(DISTINCT security_id)::INT, min(period_end), max(period_end)
+                FROM filing GROUP BY ALL ORDER BY 1, 3 DESC""")
+    parts += [_table(rows, ["kind", "family", "filings parsed", "securities", "earliest period", "latest period"]), ""]
+    rows = q("""SELECT count(*)::BIGINT, count(DISTINCT security_id)::INT FROM fact_financial""")
+    parts += [f"PIT fact rows (value changes only): **{rows[0][0]:,}** for **{rows[0][1]}** securities.", ""]
+    rows = q("SELECT key, value FROM meta WHERE key LIKE 'fin_check:%' ORDER BY key")
+    if rows:
+        out = []
+        for k, v in rows:
+            n, ok, desc = v.split(",", 2)
+            out.append((desc, int(n), int(ok), f"{int(ok) / int(n):.1%}" if int(n) else "n/a"))
+        parts += ["Accounting-identity checks (each compares two quantities a filing states independently):", "",
+                  _table(out, ["identity", "checked", "holds", "pass rate"]), ""]
+    rows = q("""SELECT count(DISTINCT security_id)::INT, count(DISTINCT period_end)::INT, min(period_end), max(period_end),
+                       count(DISTINCT security_id) FILTER (WHERE category = 'MutualFundsOrUTI')::INT
+                FROM shareholding""")
+    parts += [f"Shareholding: {rows[0][0]} securities, {rows[0][1]} quarter-ends ({rows[0][2]} .. {rows[0][3]}); "
+              f"{rows[0][4]} with category detail (mutual funds / FPI / retail ...).", ""]
+    rows = q("SELECT count(*)::INT, count(DISTINCT security_id)::INT, min(as_on), max(as_on) FROM pledge_snapshot")
+    parts += [f"Promoter pledge snapshots: {rows[0][0]} for {rows[0][1]} securities ({rows[0][2]} .. {rows[0][3]}); "
+              "history only accumulates forward (the exchange serves the latest quarter only).", ""]
+    rows = q("""SELECT scheme, method, count(*)::INT, count(DISTINCT security_id)::INT, round(avg(confidence), 2)
+                FROM classification GROUP BY ALL ORDER BY 1, 2""")
+    parts += ["Sector classification (every row carries method and confidence):", "",
+              _table(rows, ["scheme", "method", "rows", "securities", "avg confidence"]), ""]
 
     parts += ["## Open data-quality issues", ""]
     rows = q("SELECT kind, severity, count(*)::INT FROM dq_issue GROUP BY ALL ORDER BY 3 DESC")

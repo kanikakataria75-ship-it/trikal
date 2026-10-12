@@ -126,3 +126,152 @@ class PitReader:
 
 def _m(x: float | None, k: float) -> float | None:
     return None if x is None else x * k
+
+
+# ----------------------------------------------------------------------------------------------
+# Financial statements (M2)
+
+import functools  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+
+@dataclass(frozen=True)
+class FinValue:
+    line_item: str
+    basis: str
+    period_start: dt.date | None
+    period_end: dt.date
+    months: int | None        # 3 = quarter, 6/9 = year-to-date, 12 = year, None = balance-sheet date
+    value: float
+    concept: str              # source taxonomy concept (lineage)
+    source_rank: int          # 0 = preferred concept; > 0 = fallback (e.g. old HTML label)
+    known_at: dt.datetime
+    known_precision: str
+    is_restated: bool
+    filing_id: str
+
+
+@functools.lru_cache(maxsize=1)
+def load_line_items(path: str | None = None) -> dict:
+    import yaml
+
+    p = Path(path) if path else Path(__file__).resolve().parents[2] / "config" / "line_items.yaml"
+    return yaml.safe_load(p.read_text(encoding="utf-8"))["line_items"]
+
+
+def _financials(self: PitReader, security_id: str, as_of: AsOf, line_items: list[str] | None = None,
+                basis: str = "auto", months: int | None = None) -> list[FinValue]:
+    """Line items for a security as known at `as_of` (latest-known version of every value).
+
+    basis 'auto' = consolidated where the company reported it by then, else standalone. Values are INR
+    (EPS and face value in INR per share). Segment (dimensional) facts are not included."""
+    cfg = load_line_items()
+    wanted = line_items or list(cfg)
+    rank: dict[str, list[tuple[str, int]]] = {}
+    for li in wanted:
+        for r, src in enumerate(cfg[li]["sources"]):
+            rank.setdefault(src["concept"], []).append((li, r))
+    concepts = list(rank)
+    if not concepts:
+        return []
+    ph = ",".join("?" * len(concepts))
+    bases = ("consolidated", "standalone") if basis == "auto" else (basis,)
+    rows = self.con.execute(
+        f"""SELECT basis, concept, period_start, period_end, period_months, value, known_at, known_precision,
+                   is_restated, filing_id
+            FROM fact_financial
+            WHERE security_id = ? AND known_at <= ? AND dims = '' AND concept IN ({ph}) AND basis IN ({",".join("?" * len(bases))})
+            QUALIFY row_number() OVER (PARTITION BY basis, concept, period_start, period_end, unit
+                                       ORDER BY known_at DESC, filing_id DESC) = 1""",
+        [security_id, as_of.ts, *concepts, *bases]).fetchall()
+    best: dict[tuple, FinValue] = {}
+    for b, concept, ps, pe, pm, val, ka, kp, restated, fid in rows:
+        for li, r in rank[concept]:
+            if months is not None and pm != months:
+                continue
+            key = (li, b, ps, pe)
+            cur = best.get(key)
+            if cur is None or r < cur.source_rank:
+                best[key] = FinValue(li, b, ps, pe, pm, val, concept, r, ka, kp, bool(restated), fid)
+    out = list(best.values())
+    if basis == "auto":  # one basis per (line item, period): consolidated wins
+        pick: dict[tuple, FinValue] = {}
+        for v in out:
+            k = (v.line_item, v.period_start, v.period_end)
+            if k not in pick or (v.basis == "consolidated" and pick[k].basis != "consolidated"):
+                pick[k] = v
+        out = list(pick.values())
+    return sorted(out, key=lambda v: (v.line_item, v.period_end, v.months or 0))
+
+
+PitReader.financials = _financials  # type: ignore[attr-defined]
+
+
+# ----------------------------------------------------------------------------------------------
+# Ownership & classification (M2)
+
+OWNERSHIP_GROUPS = {
+    "promoter": ["ShareholdingOfPromoterAndPromoterGroup"],
+    "public": ["PublicShareholding"],
+    "mutual_funds": ["MutualFundsOrUTI"],
+    "insurance": ["InsuranceCompanies"],
+    "fpi": ["InstitutionsForeignPortfolioInvestorCategoryOne", "InstitutionsForeignPortfolioInvestorCategoryTwo"],
+    "foreign_institutions": ["InstitutionsForeign"],
+    "domestic_institutions": ["InstitutionsDomestic"],
+    "retail": ["ResidentIndividualShareholdersHoldingNominalShareCapitalUpToRsTwoLakh",
+               "ResidentIndividualShareholdersHoldingNominalShareCapitalInExcessOfRsTwoLakh"],
+}
+
+
+def _ownership(self: PitReader, security_id: str, as_of: AsOf, periods: int = 8) -> list[dict]:
+    """Shareholding by group (percent) for the latest `periods` quarters known at `as_of`.
+
+    Each row: period_end, known_at, revised flag and one key per group. A group missing from a quarter's
+    filing (e.g. category detail unavailable before Sep-2021) is None, never zero."""
+    rows = self.con.execute(
+        """SELECT period_end, category, pct, known_at, revision_flag, filing_id
+           FROM shareholding WHERE security_id = ? AND known_at <= ?
+           QUALIFY row_number() OVER (PARTITION BY period_end, category ORDER BY known_at DESC) = 1
+           ORDER BY period_end DESC""", [security_id, as_of.ts]).fetchall()
+    by_period: dict[dt.date, dict] = {}
+    for pe, cat, pct, ka, flag, fid in rows:
+        d = by_period.setdefault(pe, {"period_end": pe, "known_at": ka, "revised": bool(flag), "filing_id": fid})
+        d[cat] = pct
+        d["known_at"] = max(d["known_at"], ka)
+    out = []
+    for pe in sorted(by_period, reverse=True)[:periods]:
+        d = by_period[pe]
+        row = {"period_end": pe, "known_at": d["known_at"], "revised": d["revised"]}
+        for g, cats in OWNERSHIP_GROUPS.items():
+            vals = [d[c] for c in cats if d.get(c) is not None]
+            row[g] = sum(vals) if vals else None
+        out.append(row)
+    return out
+
+
+def _pledge(self: PitReader, security_id: str, as_of: AsOf) -> list[tuple]:
+    """Promoter pledge snapshots known at as_of (history only from the first fetch onward)."""
+    return self.con.execute(
+        """SELECT as_on, promoter_pct, pledged_pct_of_promoter, pledged_pct_of_total, shares_pledged, known_at
+           FROM pledge_snapshot WHERE security_id = ? AND known_at <= ? ORDER BY as_on DESC""",
+        [security_id, as_of.ts]).fetchall()
+
+
+def _classification(self: PitReader, security_id: str, as_of: AsOf, scheme: str = "NSE_INDUSTRY",
+                    min_confidence: float = 0.0) -> tuple | None:
+    """(code, method, confidence) in force on the as-of date, or None. Rows with method
+    'assumed_static_backward' have confidence 0.5; pass min_confidence=1.0 for official-only."""
+    d = as_of.date_ist
+    row = self.con.execute(
+        """SELECT code, method, confidence FROM classification
+           WHERE security_id = ? AND scheme = ? AND valid_from <= ? AND ? < valid_to AND confidence >= ?
+             AND known_at <= ? OR (security_id = ? AND scheme = ? AND valid_from <= ? AND ? < valid_to
+                                   AND confidence >= ? AND method = 'assumed_static_backward')
+           ORDER BY confidence DESC, valid_from DESC LIMIT 1""",
+        [security_id, scheme, d, d, min_confidence, as_of.ts, security_id, scheme, d, d, min_confidence]).fetchone()
+    return tuple(row) if row else None
+
+
+PitReader.ownership = _ownership  # type: ignore[attr-defined]
+PitReader.pledge = _pledge  # type: ignore[attr-defined]
+PitReader.classification = _classification  # type: ignore[attr-defined]

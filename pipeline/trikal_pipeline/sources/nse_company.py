@@ -65,9 +65,12 @@ def fetch_lists(symbols: list[str], fetcher: Fetcher, raw: RawStore) -> dict[str
     return stats
 
 
-def xbrl_urls(raw: RawStore, since: dt.date) -> list[tuple[str, str]]:
-    """(published date, XBRL url) from every fetched results list, newest first."""
-    out = {}
+def result_docs(raw: RawStore, since: dt.date) -> list[tuple[str, str, str]]:
+    """(period end, url, kind) for every result document listed, newest period first.
+
+    kind 'xbrl': Ind-AS / Integrated-Filing XML (2017 onward). kind 'html': the older 'Financial Results
+    Details' page that NSE hosts for filings before XBRL became mandatory (2008 - 2017)."""
+    out: dict[str, tuple[str, str]] = {}
     for key in ("nse.results.quarterly", "nse.results.annual", "nse.results.integrated"):
         for _, sha in raw.latest_ok(key).items():
             try:
@@ -77,24 +80,49 @@ def xbrl_urls(raw: RawStore, since: dt.date) -> list[tuple[str, str]]:
             if isinstance(rows, dict):
                 rows = rows.get("data") or []
             for row in rows if isinstance(rows, list) else []:
-                url = (row.get("xbrl") or "").strip()
-                if not url.lower().startswith("http") or not url.lower().endswith(".xml"):
-                    continue
+                if row.get("type") and "financials" not in row["type"].lower():
+                    continue  # SEBI Integrated Filing also lists governance/compliance XBRL: not statements
                 period_end = row.get("toDate") or row.get("qe_Date") or ""
                 try:
                     to = dt.datetime.strptime(period_end.title(), "%d-%b-%Y").date()
                 except ValueError:
                     continue
-                if to >= since:
-                    out[url] = to.isoformat()
-    return sorted(((d, u) for u, d in out.items()), reverse=True)
+                if to < since:
+                    continue
+                x = (row.get("xbrl") or "").strip()
+                h = (row.get("resultDetailedDataLink") or "").strip()
+                if x.lower().startswith("http") and x.lower().endswith(".xml"):
+                    out[x] = (to.isoformat(), "xbrl")
+                elif h.lower().startswith("http"):
+                    out[h] = (to.isoformat(), "html")
+    return sorted(((d, u, k) for u, (d, k) in out.items()), reverse=True)
 
 
-def fetch_xbrl(fetcher: Fetcher, raw: RawStore, since: dt.date) -> dict[str, int]:
-    key = "nse.xbrl.results"
+def shp_docs(raw: RawStore) -> list[tuple[str, str, str]]:
+    """(period end ISO, url, 'shp') for every shareholding-pattern XBRL listed, newest first."""
+    out = {}
+    for _, sha in raw.latest_ok("nse.shareholding").items():
+        try:
+            rows = json.loads(raw.read(sha))
+        except Exception:
+            continue
+        for row in rows if isinstance(rows, list) else []:
+            u = (row.get("xbrl") or "").strip()
+            if u.lower().startswith("http") and u.lower().endswith(".xml"):
+                try:
+                    out[u] = dt.datetime.strptime(row["date"].title(), "%d-%b-%Y").date().isoformat()
+                except (KeyError, ValueError):
+                    continue
+    return sorted(((d, u, "shp") for u, d in out.items()), reverse=True)
+
+
+def fetch_docs(fetcher: Fetcher, raw: RawStore, since: dt.date, kind: str) -> dict[str, int]:
+    key = {"xbrl": "nse.xbrl.results", "html": "nse.results.html", "shp": "nse.xbrl.shp"}[kind]
+    ext = {"xbrl": "xml", "html": "html", "shp": "xml"}[kind]
     done = raw.done_partitions(key)
-    todo = [(d, u) for d, u in xbrl_urls(raw, since) if u not in done]
-    _log(f"xbrl: {len(todo)} documents to fetch (period end >= {since})")
+    docs = shp_docs(raw) if kind == "shp" else result_docs(raw, since)
+    todo = [(d, u) for d, u, k in docs if k == kind and u not in done]
+    _log(f"{kind}: {len(todo)} documents to fetch (period end >= {since})")
     stats: dict[str, int] = {}
     for i, (_, url) in enumerate(todo, 1):
         try:
@@ -103,25 +131,42 @@ def fetch_xbrl(fetcher: Fetcher, raw: RawStore, since: dt.date) -> dict[str, int
             raw.log(key, url, url, "error", None, None, str(exc)[:300])
             stats["error"] = stats.get("error", 0) + 1
             continue
-        if r.status == 200 and b"<" in r.body[:200] and b"xbrl" in r.body[:4000].lower():
-            sha = raw.put(key, url, r.body, r.content_type, "xml")
+        head = r.body[:6000].lower()
+        valid = r.status == 200 and ((kind in ("xbrl", "shp") and b"<" in head[:200] and b"xbrl" in head)
+                                     or (kind == "html" and b"financial results" in head))
+        if valid:
+            sha = raw.put(key, url, r.body, r.content_type, ext)
             raw.log(key, url, url, "ok", r.status, sha)
             stats["ok"] = stats.get("ok", 0) + 1
         else:
-            raw.log(key, url, url, "not_found" if r.status == 404 else "error", r.status, None)
+            raw.log(key, url, url, "not_found" if r.status in (200, 404) else "error", r.status, None,
+                    "unexpected payload" if r.status == 200 else None)
             stats["missing"] = stats.get("missing", 0) + 1
         if i % 200 == 0:
-            _log(f"xbrl {i}/{len(todo)} {stats}")
+            _log(f"{kind} {i}/{len(todo)} {stats}")
     return stats
 
 
+def keep_system_awake() -> None:
+    """Ask Windows not to idle-sleep while this process runs (per-process request, like a video player;
+    no system setting is changed and it ends with the process). Closing the lid still sleeps."""
+    if sys.platform == "win32":
+        import ctypes
+
+        ES_CONTINUOUS, ES_SYSTEM_REQUIRED = 0x80000000, 0x00000001
+        ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)
+
+
 def run_overnight(symbols_file: str, since: str = "2011-04-01") -> None:
+    keep_system_awake()
     symbols = [s.strip() for s in open(symbols_file, encoding="utf-8") if s.strip()]
     raw, fetcher = RawStore(), Fetcher()
     t0 = time.monotonic()
-    _log(f"start: {len(symbols)} symbols")
+    _log(f"start: {len(symbols)} symbols (keep-awake requested)")
     _log(f"lists done: {fetch_lists(symbols, fetcher, raw)}")
-    _log(f"xbrl done: {fetch_xbrl(fetcher, raw, dt.date.fromisoformat(since))}")
+    _log(f"xbrl done: {fetch_docs(fetcher, raw, dt.date.fromisoformat(since), 'xbrl')}")
+    _log(f"shp done: {fetch_docs(fetcher, raw, dt.date.fromisoformat(since), 'shp')}")
+    _log(f"html done: {fetch_docs(fetcher, raw, dt.date.fromisoformat(since), 'html')}")
     _log(f"finished in {(time.monotonic() - t0) / 3600:.1f} h")
     fetcher.close()
 

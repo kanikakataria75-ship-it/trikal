@@ -36,6 +36,22 @@ Data lives in `data/` (git-ignored):
 .venv/Scripts/trikal coverage                # data coverage & quality report
 ```
 
+## Fundamentals & ownership (M2)
+
+The raw download is long (about 140,000 documents for the pilot universe at one request per second, 1.5–2 days).
+It is resumable and runs detached:
+
+```bash
+run_m2_overnight.cmd                           # double-click (or run in a terminal). Keep the laptop plugged in.
+```
+```bash
+.venv/Scripts/trikal refresh-m2                # parse whatever has arrived, run identity checks, rewrite the coverage report
+```
+
+`refresh-m2` can be run at any time, including while the download is still going. Individual steps are
+`parse-financials`, `parse-ownership` and `check-financials`. The progress and pass rates are at the end of
+`docs/reports/coverage.md`.
+
 ## Look at a stock as of any date
 
 ```bash

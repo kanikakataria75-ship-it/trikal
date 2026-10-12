@@ -37,3 +37,38 @@
 **Started for M2 (overnight, raw only):** per-company results lists (including SEBI "Integrated Filing"
 results from Dec-2024 on, a separate endpoint), shareholding, pledge, annual-report lists, then
 XBRL result documents since FY2012 for the pilot universe. Run: `run_m2_overnight.cmd` (resumable).
+
+## M2: Fundamentals & ownership (CODE COMPLETE for review, 2026-10-12; raw download still running)
+
+**What exists**
+- Results parsers for every era: XBRL (`INDAS`, `BANKING`, `NBFC_INDAS`, `NONINDAS`, SEBI Integrated Filing
+  "Financials") and the pre-2018 HTML pages (FY2008-FY2017). Bitemporal `filing`, `fact_financial_all`,
+  `fact_financial` (value-change PIT table), restatement-aware, `known_at` = exact exchange broadcast time.
+- `config/line_items.yaml`: 76 canonical line items (income statement, bank items incl. NPA amounts, balance
+  sheet, cash flow, ownership) with source-concept priority; `PitReader.financials(as_of, basis='auto')`
+  returns value, source concept, rank, filing and `known_at`.
+- Shareholding: promoter/public for every filing since 2015, category detail (MF, insurance, FPI, retail, ...)
+  from SHP XBRL; pledge snapshots; `PitReader.ownership` / `.pledge`.
+- Sector classification with method and confidence on every row; `PitReader.classification(min_confidence=)`.
+- Accounting-identity checks (`trikal check-financials`); coverage report extended with download progress,
+  pass rates, ownership and classification; `trikal refresh-m2` does it all in one go.
+- 55 tests (14 new): the year-to-date period rule (mutation-checked), unit scaling, `-` is not zero, Part II
+  arithmetic guard, percentage-scale normalisation, restatement and revision visibility by as-of date,
+  line-item fallback lineage, classification confidence.
+
+**Findings that changed the design** (details: DATA_SOURCES §10, ADR-014..017)
+- The XBRL year-to-date column carries the quarter's dates; periods are derived from the column.
+- Results XBRL exists only from Jun-2017; FY2008-17 comes from HTML pages (income statement only).
+- SEBI Integrated Filing (from Dec-2024) is a separate endpoint and half of its rows are governance, not financials.
+- Pledge history and shareholding before Sep-2021 are not served by the exchange (RISKS R-26, R-27).
+
+**Validated on a spread sample of 255 real documents** (180 XBRL documents across all four families and 75 old pages): 0 parse
+errors; the XBRL identities hold on 138/138 (income statement), 42/42 (balance sheet), 44/44 (cash flow);
+old-page profit reconciles on 59% of the sampled pages (company-typed template, RISKS R-28).
+The full-universe pass rates will be published in `docs/reports/coverage.md` as the download completes.
+
+**Not done / deferred**
+- The raw download is incomplete (about 1.5-2 days of wall-clock); until it finishes, coverage is partial and
+  the report says so.
+- Scheme-level mutual fund holdings (AMC files) deferred; category totals per quarter are in (RISKS R-13).
+- Annual-report PDFs and concalls are M6.

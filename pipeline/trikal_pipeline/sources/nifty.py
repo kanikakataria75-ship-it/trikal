@@ -24,6 +24,8 @@ SNAPSHOT_FILES = {
     "NIFTY100": "/IndexConstituent/ind_nifty100list.csv",
     "NIFTY200": "/IndexConstituent/ind_nifty200list.csv",
     "NIFTY500": "/IndexConstituent/ind_nifty500list.csv",
+    "NIFTYTOTALMARKET": "/IndexConstituent/ind_niftytotalmarket_list.csv",
+    "NIFTYMICROCAP250": "/IndexConstituent/ind_niftymicrocap250_list.csv",
 }
 
 # Press releases about debt indices or product launches never change equity index membership.

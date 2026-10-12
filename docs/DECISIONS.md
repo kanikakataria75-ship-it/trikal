@@ -60,3 +60,20 @@ All ADRs below are **proposed** at M0 and become accepted when the owner signs o
 **Context:** No official membership history exists (RISKS R-4).
 **Decision:** Rebuild backwards from the official constituent file using every NSE Indices press release, with a fixed-size count check at every effective date. Free-text cancellations and revocations (e.g. the voided 27-Mar-2020 rebalance, the 2024 Vodafone Idea revocation) are handled by a human-reviewed `config/index_overrides.yaml`, where each entry cites its source release. Unresolvable names stay in the walk as zero-confidence placeholders, never dropped.
 **Consequences:** Accuracy is measurable (share of dates passing the count check), and every membership row traces to a PDF.
+
+### ADR-014 · 2026-10-12 · proposed: XBRL periods come from the column, not the context dates
+**Context:** In NSE results XBRL the year-to-date column (`FourD`) carries the quarter's dates in the XML but the year's values (TCS FY24: ₹2.41 lakh cr dated Jan–Mar 2024). Trusting the dates would have stored year totals as quarterly figures.
+**Decision:** `One` = the context's own dates; `Four` = [financial-year start, reporting-period end]; instants as given; other columns are skipped and counted. `period_months` is stored with every fact. Accounting-identity checks (Income − Expenses = PBT before exceptional; Assets = Equity + Liabilities; the three cash-flow sections sum to the net change) run on every load and their pass rates are published; a regression test fails if the rule is broken.
+**Consequences:** Pass rates are the evidence the rule is right (100% on the first 138 income-statement checks). New filing layouts surface as skipped columns, not as wrong numbers.
+
+### ADR-015 · 2026-10-12 · proposed: Point-in-time fundamentals store value changes only
+**Decision:** `fact_financial_all` holds every number of every filing (lineage); `fact_financial` keeps a row only when the value differs from the previously known value of the same key, flagged `is_restated` after the first. Queries take the latest row with `known_at ≤ as_of`. Revised shareholding filings replace the original in the exchange list, so their `known_at` is the revision time (the interval in between is "unavailable", never back-filled).
+**Consequences:** Comparatives repeated in later filings add no rows (about 10× smaller); real restatements are kept; no look-ahead.
+
+### ADR-016 · 2026-10-12 · proposed: Old HTML result pages parsed losslessly, then mapped by configuration
+**Decision:** Every labelled value becomes `html:<slug>`; money is scaled to INR by the declared unit; `-` is "not reported". Mapping to canonical line items is `config/line_items.yaml` (priority: XBRL concept, then old label, with the rank returned). Part II (public/pledged/non-encumbered shares) is accepted only when the arithmetic reconciles, because the pages render some rows out of order.
+**Consequences:** Label drift is a config change, not a parser change; nothing is silently dropped or misattributed.
+
+### ADR-017 · 2026-10-12 · proposed: Classification rows carry method and confidence; backward projection is explicit
+**Decision:** NSE publishes no classification history. Official constituent files give dated snapshots (confidence 1.0, accumulating forward); the earliest label is projected backwards with confidence 0.5 and `method='assumed_static_backward'`; pre-2011 press-release industries are kept as a separate legacy scheme. Readers take `min_confidence`.
+**Consequences:** A backtest can run official-only or with the assumption, and the report states which. This is the control for the failure that sank the owner's earlier sector study.
