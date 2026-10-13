@@ -13,8 +13,8 @@ playbooks:
   - id: banks
     label: Banks
     parent: financials
-    key_metrics: [roe, roa, pb, gross_npa_amount, net_npa_amount, nim, casa_ratio, pcr, credit_cost, slippage_ratio, car, cet1, ldr]
-    requires: {nim: "annual report / investor presentation (M6)", casa_ratio: "investor presentation (M6)", pcr: "investor presentation (M6)", credit_cost: "investor presentation (M6)", slippage_ratio: "investor presentation (M6)", car: "Pillar 3 / annual report (M6)", cet1: "Pillar 3 / annual report (M6)", ldr: "bank balance sheet (advances / deposits)"}
+    key_metrics: [roe, roa, pb, gnpa_pct, nnpa_pct, nii, nii_to_assets, cost_to_income, credit_cost, cet1, ldr, nim, casa_ratio, pcr, slippage_ratio, car]
+    requires: {nim: "annual report / investor presentation (M6)", casa_ratio: "investor presentation (M6)", pcr: "investor presentation (M6)", slippage_ratio: "investor presentation (M6)", car: "Pillar 3 / annual report (M6); the results filing gives CET1 and AT1 only, not Tier 2"}
     valuation:
       primary: [p_abv, justified_pb]
       secondary: [residual_income, pe]
@@ -31,8 +31,8 @@ playbooks:
   - id: nbfc_hfc
     label: NBFC / HFC
     parent: financials
-    key_metrics: [roe, roa, pb, aum_growth, spread, cost_of_funds, stage_2_3, credit_cost, alm_gap, leverage_assets_to_equity]
-    requires: {aum_growth: "investor presentation (M6)", spread: "investor presentation (M6)", cost_of_funds: "investor presentation (M6)", stage_2_3: "investor presentation (M6)", credit_cost: "investor presentation (M6)", alm_gap: "ALM disclosure (M6)", leverage_assets_to_equity: "balance sheet (assets / equity)"}
+    key_metrics: [roe, roa, pb, leverage_assets_to_equity, aum_growth, spread, cost_of_funds, stage_2_3, credit_cost, alm_gap]
+    requires: {aum_growth: "investor presentation (M6)", spread: "investor presentation (M6)", cost_of_funds: "investor presentation (M6)", stage_2_3: "investor presentation (M6)", credit_cost: "investor presentation (M6); NBFC filings carry no loan-book line", alm_gap: "ALM disclosure (M6)"}
     valuation:
       primary: [justified_pb, p_abv]
       secondary: [pe]

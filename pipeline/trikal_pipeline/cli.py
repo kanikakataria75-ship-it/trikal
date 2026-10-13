@@ -355,7 +355,7 @@ def refresh_m2() -> None:
     from trikal_pipeline import classification, coverage as cov, quality, shp
     from trikal_pipeline import load_financials as lf
 
-    con, raw = connect(), RawStore()
+    con, raw = _connect_wait(), RawStore()
     init_schema(con)
     for kind in lf.KINDS:
         typer.echo(f"{kind}: {lf.load_results(con, raw, kind)}")

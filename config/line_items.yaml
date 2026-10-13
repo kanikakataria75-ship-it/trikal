@@ -166,18 +166,54 @@ line_items:
     statement: bank
     kind: flow
     sources: [{concept: ProvisionsOtherThanTaxAndContingencies}]
+  # Banks file asset quality on the STANDALONE statement; the consolidated block carries a placeholder 0.0 meaning
+  # "not reported here". prefer_basis + zero_is_missing make sure that placeholder is never shown as a real zero.
   gross_npa_amount:
     statement: bank
     kind: flow
+    prefer_basis: standalone
+    zero_is_missing: true
     sources: [{concept: GrossNonPerformingAssets}]
   net_npa_amount:
     statement: bank
     kind: flow
+    prefer_basis: standalone
+    zero_is_missing: true
     sources: [{concept: NonPerformingAssets}]
+  gross_npa_pct:
+    statement: bank
+    kind: flow
+    prefer_basis: standalone
+    zero_is_missing: true
+    sources: [{concept: PercentageOfGrossNpa}]        # a fraction (0.0117 = 1.17%)
+  net_npa_pct:
+    statement: bank
+    kind: flow
+    prefer_basis: standalone
+    zero_is_missing: true
+    sources: [{concept: PercentageOfNpa}]
+  cet1_ratio:
+    statement: bank
+    kind: flow
+    prefer_basis: standalone
+    zero_is_missing: true
+    sources: [{concept: CET1Ratio}]
+  at1_ratio:
+    statement: bank
+    kind: flow
+    prefer_basis: standalone
+    zero_is_missing: true
+    sources: [{concept: AdditionalTier1Ratio}]
   return_on_assets_reported:
     statement: bank
     kind: flow
+    prefer_basis: standalone
+    zero_is_missing: true
     sources: [{concept: ReturnOnAssets}]
+  bank_operating_expenses:
+    statement: bank
+    kind: flow
+    sources: [{concept: OperatingExpenses}]
   bank_advances:
     statement: bank
     kind: stock
@@ -211,7 +247,8 @@ line_items:
   equity_owners:
     statement: balance
     kind: stock
-    sources: [{concept: EquityAttributableToOwnersOfParent}]
+    # banks have no "equity" line: shareholders' funds = share capital + reserves and surplus (derived, labelled sum:)
+    sources: [{concept: EquityAttributableToOwnersOfParent}, {sum: [Capital, ReservesAndSurplus]}]
   equity_share_capital:
     statement: balance
     kind: stock

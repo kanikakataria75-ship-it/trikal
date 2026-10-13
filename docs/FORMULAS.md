@@ -287,3 +287,12 @@ rates and growth are always passed in, labelled `user`, or requested from `templ
   peers as of the same date. Fewer than 8 observations or `min_peers` comparable peers → no percentile, with a
   warning. A cyclical company with a low P/E at margins in the top 20% of its own history gets
   `cyclical_peak_trap`.
+
+## Banks (2026-10-13)
+
+Bank filings differ from industrial ones, so three rules live in `config/line_items.yaml` and `PitReader.financials`:
+
+- **Equity** has no line in a bank balance sheet: `equity_owners` falls back to `sum: [Capital, ReservesAndSurplus]` (concept shown as `sum:Capital+ReservesAndSurplus`). Used by ROE, P/B and assets/equity.
+- **Asset quality is filed on the standalone statement.** The consolidated block of the same results file carries a placeholder `0.0` ("not reported here"). Line items marked `prefer_basis: standalone` + `zero_is_missing: true` (GNPA/NNPA amount and %, CET1, AT1, reported ROA) take the standalone value and drop zeros, so a placeholder is never shown as a real 0% NPA (this showed HDFC Bank's GNPA as 0 until 13-Oct-2026).
+- Metrics: `nii` = interest earned − interest expended (TTM); `nii_to_assets` = NII / average total assets (a proxy: reported NIM divides by average interest-earning assets, which filings do not give); `cost_to_income` = operating expenses / (NII + other income); `ldr` = advances / deposits; `credit_cost` = TTM provisions / average advances; `gnpa_pct`, `nnpa_pct`, `cet1` as reported. Balance-sheet items use the latest date and the one about a year earlier (half-yearly for banks); with a single date the output carries `single_balance_sheet_date`.
+- Still needing other sources (M6): NIM, CASA, PCR, slippage, total CAR (the filing gives CET1 and AT1, not Tier 2).

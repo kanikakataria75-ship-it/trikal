@@ -168,11 +168,19 @@ def run_overnight(symbols_file: str, since: str = "2011-04-01") -> None:
     _log(f"lists done: {fetch_lists(symbols, fetcher, raw)}")
     # ownership detail first for the latest four quarters of every company (a terminal with no holding pattern
     # looks empty), then the results documents, then the older shareholding history
+    since_d = dt.date.fromisoformat(since)
     recent = dt.date.today() - dt.timedelta(days=400)
-    _log(f"shp (recent) done: {fetch_docs(fetcher, raw, dt.date.fromisoformat(since), 'shp', shp_since=recent)}")
-    _log(f"xbrl done: {fetch_docs(fetcher, raw, dt.date.fromisoformat(since), 'xbrl')}")
+    detail = dt.date(2021, 6, 30)     # category detail (MF / FPI / insurance / retail) exists from Sep-2021
+    # order = what an empty terminal needs first: latest holding pattern, the full detailed holding history,
+    # then the results documents (newest period first), then the oldest holding filings and the HTML pages;
+    # every phase ends with a parse so the screens fill as the data arrives
+    _log(f"shp (recent) done: {fetch_docs(fetcher, raw, since_d, 'shp', shp_since=recent)}")
     _refresh()
-    _log(f"shp done: {fetch_docs(fetcher, raw, dt.date.fromisoformat(since), 'shp')}")
+    _log(f"shp (detail era) done: {fetch_docs(fetcher, raw, since_d, 'shp', shp_since=detail)}")
+    _refresh()
+    _log(f"xbrl done: {fetch_docs(fetcher, raw, since_d, 'xbrl')}")
+    _refresh()
+    _log(f"shp (older) done: {fetch_docs(fetcher, raw, since_d, 'shp')}")
     _log(f"html done: {fetch_docs(fetcher, raw, dt.date.fromisoformat(since), 'html')}")
     _refresh()
     _log(f"finished in {(time.monotonic() - t0) / 3600:.1f} h")

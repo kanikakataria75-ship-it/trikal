@@ -164,18 +164,31 @@ def _financials(self: PitReader, security_id: str, as_of: AsOf, line_items: list
     """Line items for a security as known at `as_of` (latest-known version of every value).
 
     basis 'auto' = consolidated where the company reported it by then, else standalone. Values are INR
-    (EPS and face value in INR per share). Segment (dimensional) facts are not included."""
+    (EPS and face value in INR per share). Segment (dimensional) facts are not included.
+
+    Config can refine this per line item (config/line_items.yaml):
+      sum: [A, B]          a source built as A + B for the same filing basis and period (bank equity = Capital + Reserves);
+                           its concept is reported as "sum:A+B" so the lineage shows it is derived
+      prefer_basis: b      the basis in which the item is really reported wins over the caller's basis
+                           (banks file asset quality on the standalone statement)
+      zero_is_missing      a reported 0 means "not reported at this level": it is dropped, never shown as a zero"""
     cfg = load_line_items()
     wanted = line_items or list(cfg)
     rank: dict[str, list[tuple[str, int]]] = {}
+    sums: list[tuple[str, int, str, tuple[str, ...]]] = []
     for li in wanted:
         for r, src in enumerate(cfg[li]["sources"]):
-            rank.setdefault(src["concept"], []).append((li, r))
-    concepts = list(rank)
+            if "sum" in src:
+                sums.append((li, r, "sum:" + "+".join(src["sum"]), tuple(src["sum"])))
+            else:
+                rank.setdefault(src["concept"], []).append((li, r))
+    concepts = list({*rank, *(c for *_, parts in sums for c in parts)})
     if not concepts:
         return []
+    prefer = {li: cfg[li]["prefer_basis"] for li in wanted if cfg[li].get("prefer_basis")}
+    zero_missing = {li for li in wanted if cfg[li].get("zero_is_missing")}
+    bases = ("consolidated", "standalone") if (basis == "auto" or prefer) else (basis,)
     ph = ",".join("?" * len(concepts))
-    bases = ("consolidated", "standalone") if basis == "auto" else (basis,)
     rows = self.con.execute(
         f"""SELECT basis, concept, period_start, period_end, period_months, value, known_at, known_precision,
                    is_restated, filing_id
@@ -184,23 +197,45 @@ def _financials(self: PitReader, security_id: str, as_of: AsOf, line_items: list
             QUALIFY row_number() OVER (PARTITION BY basis, concept, period_start, period_end, unit
                                        ORDER BY known_at DESC, filing_id DESC) = 1""",
         [security_id, as_of.ts, *concepts, *bases]).fetchall()
+    facts = {(c, b, ps, pe): (pm, val, ka, kp, bool(rs), fid) for b, c, ps, pe, pm, val, ka, kp, rs, fid in rows}
     best: dict[tuple, FinValue] = {}
-    for b, concept, ps, pe, pm, val, ka, kp, restated, fid in rows:
-        for li, r in rank[concept]:
-            if months is not None and pm != months:
+
+    def offer(li, b, ps, pe, pm, val, concept, r, ka, kp, restated, fid):
+        if months is not None and pm != months:
+            return
+        if li in zero_missing and val == 0:
+            return
+        key = (li, b, ps, pe)
+        cur = best.get(key)
+        if cur is None or r < cur.source_rank:
+            best[key] = FinValue(li, b, ps, pe, pm, val, concept, r, ka, kp, restated, fid)
+
+    for (concept, b, ps, pe), (pm, val, ka, kp, restated, fid) in facts.items():
+        for li, r in rank.get(concept, []):
+            offer(li, b, ps, pe, pm, val, concept, r, ka, kp, restated, fid)
+    for li, r, key, parts in sums:
+        for (concept, b, ps, pe), first in facts.items():
+            if concept != parts[0] or not all((c, b, ps, pe) in facts for c in parts):
                 continue
-            key = (li, b, ps, pe)
-            cur = best.get(key)
-            if cur is None or r < cur.source_rank:
-                best[key] = FinValue(li, b, ps, pe, pm, val, concept, r, ka, kp, bool(restated), fid)
-    out = list(best.values())
-    if basis == "auto":  # one basis per (line item, period): consolidated wins
-        pick: dict[tuple, FinValue] = {}
-        for v in out:
-            k = (v.line_item, v.period_start, v.period_end)
-            if k not in pick or (v.basis == "consolidated" and pick[k].basis != "consolidated"):
-                pick[k] = v
-        out = list(pick.values())
+            vs = [facts[(c, b, ps, pe)] for c in parts]
+            offer(li, b, ps, pe, first[0], sum(v[1] for v in vs), key, r, max(v[2] for v in vs), first[3],
+                  any(v[4] for v in vs), first[5])
+
+    chosen: dict[tuple, dict[str, FinValue]] = {}
+    for (li, b, ps, pe), v in best.items():
+        chosen.setdefault((li, ps, pe), {})[b] = v
+    out: list[FinValue] = []
+    for (li, ps, pe), cands in chosen.items():
+        if li in prefer:
+            order = [prefer[li]] + [b for b in ("consolidated", "standalone") if b != prefer[li]]
+        elif basis == "auto":
+            order = ["consolidated", "standalone"]      # one basis per (line item, period): consolidated wins
+        else:
+            order = [basis]
+        for b in order:
+            if b in cands:
+                out.append(cands[b])
+                break
     return sorted(out, key=lambda v: (v.line_item, v.period_end, v.months or 0))
 
 

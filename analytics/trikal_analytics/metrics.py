@@ -81,7 +81,7 @@ class Ctx:
 
     def _note(self, vals: list[FinValue]) -> None:
         for v in vals:
-            if v.source_rank > 0:
+            if v.concept.startswith("html:"):
                 w = f"old_page_input:{v.line_item}"
                 if w not in self.warnings:
                     self.warnings.append(w)
@@ -536,7 +536,86 @@ def _direct(mid: str, li: str, unit: str, formula: str):
 
 
 _direct("gross_npa_amount", "gross_npa_amount", "INR", "gross non-performing assets, as reported in the results filing")
-_direct("net_npa_amount", "net_npa_amount", "INR", "net non-performing assets, as reported in the results filing")
+_direct("net_npa_amount", "net_npa_amount", "INR", "net non-performing assets, as reported in the results filing (standalone; a reported 0 means not reported and is dropped)")
+_direct("gnpa_pct", "gross_npa_pct", "ratio", "gross NPA ratio as reported in the results filing (standalone)")
+_direct("nnpa_pct", "net_npa_pct", "ratio", "net NPA ratio as reported in the results filing (standalone)")
+_direct("cet1", "cet1_ratio", "ratio", "Common Equity Tier 1 ratio as reported in the results filing (standalone)")
+
+
+def _pair(c: Ctx, li: str):
+    """Latest balance-sheet value and the one about a year earlier (None when the earlier one is not there)."""
+    now = c.instant(li)
+    return now, (c.instant(li, back_days=365) if now else None)
+
+
+def _avg(now, then):
+    return ((now.value + then.value) / 2, [now, then]) if then else (now.value, [now])
+
+
+@metric("nii", "INR", "net interest income: interest earned - interest expended, trailing twelve months")
+def nii(c: Ctx):
+    a, b = c.ttm("interest_earned"), c.ttm("interest_expended")
+    if not a or not b:
+        return _na("nii", *(["interest_earned"] if not a else []), *(["interest_expended"] if not b else []))
+    return _val(c, "nii", a[0] - b[0], [_inp(v.line_item, v) for v in [*a[1], *b[1]]])
+
+
+@metric("nii_to_assets", "ratio", "NII / average total assets. A proxy: reported NIM divides by average interest-earning assets, which filings do not give")
+def nii_to_assets(c: Ctx):
+    n = nii(c)
+    now, then = _pair(c, "total_assets")
+    if isinstance(n, NotAvailable) or not now:
+        return _na("nii_to_assets", *(n.missing if isinstance(n, NotAvailable) else ()), *(["total_assets"] if not now else []))
+    base, used = _avg(now, then)
+    if base <= 0:
+        return Undefined("nii_to_assets", "assets <= 0")
+    return _val(c, "nii_to_assets", n.value / base, [*n.inputs, *(_inp("total_assets", v) for v in used)],
+                () if then else ("single_balance_sheet_date",))
+
+
+@metric("cost_to_income", "ratio", "operating expenses / (NII + other income), trailing twelve months")
+def cost_to_income(c: Ctx):
+    n, ox, oi = nii(c), c.ttm("bank_operating_expenses"), c.ttm("other_income")
+    if isinstance(n, NotAvailable) or not ox or not oi:
+        return _na("cost_to_income", *(n.missing if isinstance(n, NotAvailable) else ()),
+                   *(["bank_operating_expenses"] if not ox else []), *(["other_income"] if not oi else []))
+    inc = n.value + oi[0]
+    if inc <= 0:
+        return Undefined("cost_to_income", "net operating income <= 0")
+    return _val(c, "cost_to_income", ox[0] / inc, [*n.inputs, *(_inp(v.line_item, v) for v in [*ox[1], *oi[1]])])
+
+
+@metric("ldr", "ratio", "loan-to-deposit ratio: advances / deposits (latest balance sheet)")
+def ldr(c: Ctx):
+    adv, dep = c.instant("bank_advances"), c.instant("bank_deposits")
+    if not adv or not dep:
+        return _na("ldr", *(["bank_advances"] if not adv else []), *(["bank_deposits"] if not dep else []))
+    if dep.value <= 0:
+        return Undefined("ldr", "deposits <= 0")
+    return _val(c, "ldr", adv.value / dep.value, [_inp("bank_advances", adv), _inp("bank_deposits", dep)])
+
+
+@metric("credit_cost", "ratio", "provisions (other than tax and contingencies), trailing twelve months / average advances")
+def credit_cost(c: Ctx):
+    pr = c.ttm("bank_provisions")
+    now, then = _pair(c, "bank_advances")
+    if not pr or not now:
+        return _na("credit_cost", *(["bank_provisions"] if not pr else []), *(["bank_advances"] if not now else []))
+    base, used = _avg(now, then)
+    if base <= 0:
+        return Undefined("credit_cost", "advances <= 0")
+    return _val(c, "credit_cost", pr[0] / base, [*(_inp(v.line_item, v) for v in pr[1]), *(_inp("bank_advances", v) for v in used)],
+                () if then else ("single_balance_sheet_date",))
+
+
+@metric("leverage_assets_to_equity", "x", "total assets / equity attributable to owners (latest balance sheet)")
+def leverage_assets_to_equity(c: Ctx):
+    a, eq = c.instant("total_assets"), c.instant("equity_owners") or c.instant("total_equity")
+    if not a or not eq:
+        return _na("leverage_assets_to_equity", *(["total_assets"] if not a else []), *(["equity"] if not eq else []))
+    if eq.value <= 0:
+        return Undefined("leverage_assets_to_equity", "equity <= 0")
+    return _val(c, "leverage_assets_to_equity", a.value / eq.value, [_inp("total_assets", a), _inp(eq.line_item, eq)])
 
 
 def _external(mid: str, unit: str):
@@ -545,8 +624,8 @@ def _external(mid: str, unit: str):
 
 # Sector metrics TRIKAL cannot derive from the results filings yet (they come from concalls / annual reports /
 # regulators in M5-M6). They exist so the engine answers "NotAvailable: needs X" instead of KeyError or a guess.
-for _m, _u in (("nim", "ratio"), ("casa_ratio", "ratio"), ("pcr", "ratio"), ("credit_cost", "ratio"), ("slippage_ratio", "ratio"),
-               ("car", "ratio"), ("cet1", "ratio"), ("ldr", "ratio"), ("vnb", "INR"), ("vnb_margin", "ratio"),
+for _m, _u in (("nim", "ratio"), ("casa_ratio", "ratio"), ("pcr", "ratio"), ("slippage_ratio", "ratio"),
+               ("car", "ratio"), ("vnb", "INR"), ("vnb_margin", "ratio"),
                ("embedded_value", "INR"), ("combined_ratio", "ratio"), ("arpob", "INR"), ("sssg", "ratio"),
                ("order_book", "INR"), ("book_to_bill", "x"), ("arpu", "INR"), ("load_factor", "ratio")):
     _external(_m, _u)
