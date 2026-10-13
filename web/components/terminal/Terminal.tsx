@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef } from "react";
 import { DockviewReact, type DockviewApi, type DockviewReadyEvent, type IDockviewHeaderActionsProps, type IDockviewPanelProps } from "dockview-react";
 import "dockview-react/dist/styles/dockview.css";
-import { useCompany, useMeta, useTimeline } from "@/lib/api";
+import { useCompany, useLive, useMeta, useTimeline } from "@/lib/api";
 import { FUNCTIONS } from "@/lib/commands";
 import { dmy, dmyTime, todayIST } from "@/lib/format";
 import { storedMode, useT, workspace, type FnCode, type Mode } from "@/lib/store";
@@ -144,6 +144,7 @@ function Header() {
   const { asOf, setAsOf, code, setPalette, mode } = useT();
   const meta = useMeta(asOf);
   const co = useCompany(code, asOf);
+  const live = useLive(code, asOf).data;
   const wm = meta.data?.watermark;
   return (
     <header className="t-head">
@@ -157,6 +158,9 @@ function Header() {
         <span className="t-active-link">A</span>
         <b className="mono">{code}</b>
         <span className="t-active-name">{co.data?.name ?? (co.isError ? "not listed at this as-of" : "…")}</span>
+        {live?.state === "value" && live.quote.change_pct !== null && (
+          <span className={`t-live mono ${live.quote.change_pct >= 0 ? "pos" : "neg"}`}>{live.quote.ltp.toLocaleString("en-IN", { maximumFractionDigits: 2 })} {live.quote.change_pct >= 0 ? "▲" : "▼"}{Math.abs(live.quote.change_pct * 100).toFixed(2)}%{live.market_open ? <i className="live-dot" /> : null}</span>
+        )}
       </div>
       <div className="t-head-right">
         <ModeSwitch />

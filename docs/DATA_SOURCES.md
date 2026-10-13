@@ -167,3 +167,12 @@ Rating actions arrive two ways: (a) agency press releases (CRISIL, ICRA, CARE, I
 
 Not used yet: RBI DBIE (no stable public API), GDELT (unreliable responses during probing), FBIL reference rates.
 `trikal fetch-macro` fetches and loads everything (~150k observations, 3 s load via CSV COPY).
+
+## 13. Live prices (owner's own broker account)
+
+NSE's public quote API (`/api/quote-equity`, `/api/allIndices`) answers `403 Access Denied` behind bot protection; TRIKAL does not try to get around it.
+Live prices therefore come from the owner's own Angel One SmartAPI account (`api/trikal_api/live.py`):
+login (`/rest/auth/angelbroking/user/v1/loginByPassword`, API key + client code + MPIN + TOTP) then market quotes
+(`/rest/secure/angelbroking/market/v1/quote/`, FULL mode, up to 50 tokens per call, ~1 call/s). Symbol→token map from the public
+instrument file `OpenAPIScripMaster.json` (cached 7 days). Read-only by construction: only those two paths can be called (tested).
+Live exists only for `as_of=NOW`; rewound views use the exchange's end-of-day prices. Redistribution is not allowed by the broker's terms: personal use only.

@@ -5,7 +5,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AreaSeries, CandlestickSeries, ColorType, CrosshairMode, HistogramSeries, PriceScaleMode, createChart, createSeriesMarkers, type IChartApi, type UTCTimestamp } from "lightweight-charts";
-import { useCompany, usePrices, useTimeline, type Streak } from "@/lib/api";
+import { useCompany, useLive, usePrices, useTimeline, type Streak } from "@/lib/api";
 import { dmy, dmyTime, indianGroup, METRIC_LABEL } from "@/lib/format";
 import { FUNCTIONS } from "@/lib/commands";
 import { useT, workspace, type FnCode } from "@/lib/store";
@@ -41,6 +41,7 @@ export function DES({ params }: PanelProps) {
   const asOf = usePanelAsOf(params.pin);
   const q = useCompany(code, asOf);
   const px = usePrices(code, asOf);
+  const live = useLive(code, asOf).data;
   const [tip, setTip] = useState<TipReadout | null>(null);
   const mode = useT((s) => s.mode);
   const streak: Streak | null = useMemo(() => {
@@ -74,10 +75,16 @@ export function DES({ params }: PanelProps) {
                     {d.family && <Chip tone="mute">files {d.family}</Chip>}
                   </div>
                   <div className="des-price">
-                    {d.last_price ? (
+                    {live?.state === "value" ? (
+                      <>
+                        <span className="mono des-px">₹{live.quote.ltp.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</span>
+                        {live.quote.change_pct !== null && <span className={`mono ${live.quote.change_pct >= 0 ? "pos" : "neg"}`}>{live.quote.change_pct >= 0 ? "▲" : "▼"} {Math.abs(live.quote.change_pct * 100).toFixed(2)}%</span>}
+                        <span className="des-pxd"><span className={live.market_open ? "live-dot" : "live-dot off"} />{live.market_open ? "LIVE" : "market closed"} · {live.quote.exchange_time ?? ""} · Angel One</span>
+                      </>
+                    ) : d.last_price ? (
                       <>
                         <span className="mono des-px">₹{d.last_price.close.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</span>
-                        <span className="des-pxd">last close {dmy(d.last_price.date)} · unadjusted</span>
+                        <span className="des-pxd">end-of-day close {dmy(d.last_price.date)} · unadjusted{asOf === "NOW" && live?.state === "na" ? ` · live price: ${live.configured ? live.reason : "not set up"}` : ""}</span>
                       </>
                     ) : <span className="v-muted">no price known</span>}
                   </div>

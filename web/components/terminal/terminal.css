@@ -333,3 +333,9 @@
 .mc-head span { font-size: 11px; color: var(--fg-2); }
 .mc-head i { font-style: normal; font-size: 10.5px; color: var(--warn); margin-left: auto; }
 .mc-canvas { flex: 1; min-height: 240px; }
+
+/* live price */
+.live-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--pos); margin-right: 6px; box-shadow: 0 0 6px var(--pos); animation: pulse 1.6s infinite; vertical-align: middle; }
+.live-dot.off { background: var(--fg-2); box-shadow: none; animation: none; }
+.t-live { margin-left: 10px; font-size: 12px; white-space: nowrap; }
+.t-live .live-dot { margin: 0 0 0 6px; }

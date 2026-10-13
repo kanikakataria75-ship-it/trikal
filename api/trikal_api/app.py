@@ -229,6 +229,27 @@ def _time_machine(a: AsOf, hindsight: bool, before_days: int = 120) -> dict:
     return out
 
 
+@app.get("/api/live/{code}")
+def live_quote(code: str, as_of: str = AS_OF):
+    """Live NSE quote from the owner's own broker account. Exists only for NOW (a past as-of never shows a live price)
+    and never invents a number: not configured / market closed / broker error all come back as an explicit state."""
+    from trikal_api import live
+
+    if as_of.upper() != "NOW":
+        raise HTTPException(422, "live quotes exist only for NOW; rewound views use the exchange's end-of-day prices")
+    open_now = live.market_open()
+    try:
+        q = live.ANGEL.quotes([code]).get(code.upper())
+    except live.LiveError as e:
+        return ok({"state": "na", "reason": str(e), "market_open": open_now, "configured": live.ANGEL.configured(),
+                   "missing": live.ANGEL.missing()})
+    if not q or q["ltp"] is None:
+        return ok({"state": "na", "reason": f"no live quote for {code.upper()} from the broker", "market_open": open_now,
+                   "configured": True, "missing": []})
+    return ok({"state": "value", "quote": q, "market_open": open_now, "source": "Angel One SmartAPI (your account)",
+               "note": "ltp is the last traded price; outside market hours it is the last close"})
+
+
 @app.get("/api/macro")
 def macro_overview(as_of: str = AS_OF):
     """Every macro series with its last value known at as_of and the value a year earlier."""

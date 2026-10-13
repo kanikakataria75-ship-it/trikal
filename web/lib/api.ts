@@ -81,6 +81,26 @@ export type TimeMachine = Envelope & {
 export const useTimeMachine = (asOf: string) =>
   useQuery({ queryKey: ["tm", asOf, false], queryFn: () => api<TimeMachine>(`/api/timemachine?${q(asOf, { hindsight: false })}`), staleTime: Infinity, placeholderData: (p) => p });
 
+export type LiveQuote = { code: string; ltp: number; open: number | null; high: number | null; low: number | null; prev_close: number | null; change: number | null; change_pct: number | null; volume: number | null; exchange_time: string | null };
+export type Live = Envelope & ({ state: "value"; quote: LiveQuote; market_open: boolean; source: string; note: string } | { state: "na"; reason: string; market_open: boolean; configured: boolean; missing: string[] });
+
+/* Live price (own broker account). Only for NOW. Polls every 5 s while the market is open; stops entirely if the
+   broker is not configured (the answer will not change by asking again). */
+export const useLive = (code: string | null, asOf: string) =>
+  useQuery({
+    queryKey: ["live", code],
+    queryFn: () => api<Live>(`/api/live/${encodeURIComponent(code!)}?as_of=NOW`),
+    enabled: !!code && asOf === "NOW",
+    staleTime: 0,
+    retry: false,
+    refetchInterval: (qq) => {
+      const d = qq.state.data;
+      if (!d) return false;
+      if (d.state === "na" && !d.configured) return false;
+      return d.market_open ? 5000 : 60000;
+    },
+  });
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
