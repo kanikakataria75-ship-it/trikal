@@ -195,6 +195,23 @@ def fetch_macro(only: str = typer.Option("", help="comma-separated series ids (d
     typer.echo(f"loaded: {macro.load(con, raw)}")
 
 
+def _connect_wait(minutes: int = 20):
+    """Open the database for writing; if the API (or anything else) holds it, wait for it to let go."""
+    import duckdb
+
+    from trikal_core.db import connect
+
+    deadline = time.monotonic() + minutes * 60
+    while True:
+        try:
+            return connect()
+        except duckdb.IOException as e:
+            if time.monotonic() > deadline:
+                raise
+            typer.echo(f"database busy ({str(e)[:80]}...); retrying in 20 s")
+            time.sleep(20)
+
+
 @app.command("update-daily")
 def update_daily(refresh: bool = typer.Option(True, help="then parse everything downloaded so far (refresh-m2)")) -> None:
     """Bring prices up to the last published session, then (optionally) parse the fundamentals downloaded so far.
@@ -218,7 +235,7 @@ def update_daily(refresh: bool = typer.Option(True, help="then parse everything 
             stats[bhav.fetch_day(fetcher, raw, ex, d)] += 1
         typer.echo(f"{ex}: {len(days)} days asked up to {last}: {stats}")
     fetcher.close()
-    con = connect()
+    con = _connect_wait()
     init_schema(con)
     for ex in ("NSE", "BSE"):
         bhav.stage_all(raw, ex)
