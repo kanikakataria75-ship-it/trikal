@@ -206,7 +206,7 @@ def _shape(code: str, q: dict) -> dict:
             "prev_close": prev, "change": (ltp - prev) if ltp is not None and prev else None,
             "change_pct": (ltp / prev - 1) if ltp is not None and prev else None,
             "volume": _f(q.get("tradeVolume")), "exchange_time": q.get("exchFeedTime") or q.get("exchTradeTime"),
-            "week52_high": _f(q.get("52WeekHighPrice")), "week52_low": _f(q.get("52WeekLowPrice"))}
+            "week52_high": _f(q.get("52WeekHigh")), "week52_low": _f(q.get("52WeekLow"))}
 
 
 ANGEL = AngelQuotes()

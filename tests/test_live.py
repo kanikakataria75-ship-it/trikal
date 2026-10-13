@@ -33,7 +33,7 @@ class Broker:
         if req.url.path == QUOTE:
             return httpx.Response(200, json={"status": True, "data": {"fetched": [
                 {"symbolToken": "11536", "ltp": "2130.5", "close": "2125.0", "open": "2120", "high": "2140", "low": "2110",
-                 "tradeVolume": 123456, "exchFeedTime": "13-Oct-2026 15:29:58"}]}})
+                 "tradeVolume": 123456, "exchFeedTime": "13-Oct-2026 15:29:58", "52WeekHigh": 3000, "52WeekLow": 1900}]}})
         return httpx.Response(404)
 
 
@@ -60,6 +60,7 @@ def test_totp_matches_the_rfc6238_vector():
 def test_a_quote_is_shaped_and_only_two_endpoints_are_ever_used(env, tmp_path):
     b = Broker()
     q = adapter(tmp_path, b).quotes(["tcs"])["TCS"]
+    assert (q["week52_high"], q["week52_low"]) == (3000.0, 1900.0)  # real field names, seen on the live API
     assert q["ltp"] == 2130.5 and q["prev_close"] == 2125.0 and round(q["change_pct"], 5) == round(2130.5 / 2125 - 1, 5)
     assert {c[0] for c in b.calls} == {LOGIN, QUOTE}
     assert b.calls[1][1] == {"mode": "FULL", "exchangeTokens": {"NSE": ["11536"]}}      # the NSE equity, not the NFO future
