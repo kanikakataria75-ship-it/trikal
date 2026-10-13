@@ -21,6 +21,7 @@ export function PanelState({ q, children, empty }: { q: { isLoading: boolean; er
     return <div className="t-empty"><b>API unavailable</b><span>{e.message || "Start it: python -m uvicorn trikal_api.app:app --app-dir api"}</span></div>;
   }
   if (empty) return <div className="t-empty"><b>Nothing to show yet</b><span>{empty}</span></div>;
+  if (q.data === undefined) return <Skeleton />;      // between a failed/paused fetch and the next one: never render children without data
   return <>{children()}</>;
 }
 

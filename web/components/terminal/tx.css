@@ -1,0 +1,83 @@
+/* TX — Transmission Engine */
+.tx { display: flex; flex-direction: column; gap: 8px; }
+.tx-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.tx-sh { font-size: 10px; letter-spacing: 0.2em; color: var(--gold-1); }
+.tx-bar input { flex: 1; min-width: 200px; max-width: 420px; background: var(--bg-0); border: 1px solid var(--line-strong); color: var(--fg-0); padding: 6px 9px; font-size: 12.5px; outline: none; }
+.tx-bar input:focus { border-color: var(--gold-2); }
+.tx-bar button { background: none; border: 1px solid var(--gold-2); color: var(--gold-0); padding: 5px 12px; font-size: 11.5px; cursor: pointer; }
+.tx-bar button.ghost { border-color: var(--line-strong); color: var(--fg-2); }
+.tx-chips { display: flex; flex-wrap: wrap; gap: 4px; width: 100%; }
+.tx-chips button { border-color: var(--line); color: var(--fg-1); font-family: var(--font-mono); font-size: 10.5px; padding: 2px 8px; }
+.tx-chips button:hover { color: var(--gold-0); border-color: var(--gold-2); }
+.tx-err { color: var(--neg); font-size: 12px; padding: 4px 2px; }
+.tx-main { display: grid; grid-template-columns: minmax(0, 1.9fr) minmax(300px, 1fr); gap: 12px; min-height: 0; flex: 1; }
+@media (max-width: 1000px) { .tx-main { grid-template-columns: 1fr; } }
+.tx-left { min-width: 0; min-height: 360px; position: relative; }
+.tx-scene { position: absolute; inset: 0; background: #060709; border: 1px solid var(--line); }
+.tx-scene-cap { position: absolute; left: 10px; bottom: 8px; right: 10px; font-size: 10.5px; color: var(--fg-2); pointer-events: none; text-shadow: 0 1px 6px #000; }
+.tx-plane { font-size: 9px; letter-spacing: 0.2em; color: rgba(212, 175, 55, 0.8); white-space: nowrap; }
+.tx-lbl { font-size: 10px; color: var(--fg-1); white-space: nowrap; padding: 1px 5px; background: rgba(6, 7, 9, 0.6); text-shadow: 0 1px 4px #000; }
+.tx-lbl.hot { color: #fff3c4; border-bottom: 1px solid var(--gold-1); }
+.tx-right { min-width: 0; overflow-y: auto; }
+.tx-help { font-size: 12.5px; line-height: 1.6; color: var(--fg-1); padding: 4px 2px; }
+.tx-help b { color: var(--fg-0); }
+.tx-tab tbody tr { cursor: pointer; }
+.tx-tab tr.sel td { background: rgba(212, 175, 55, 0.07); }
+.tx-tab td, .tx-tab th { text-align: right; }
+.tx-tab td:first-child, .tx-tab th:first-child { text-align: left; }
+.tx-bar-cell { width: 70px; padding: 0 4px !important; text-align: left !important; }
+.tx-bar-cell i { display: block; height: 4px; }
+.tx-bar-cell i.up { background: var(--pos); }
+.tx-bar-cell i.dn { background: var(--neg); }
+.cf { font-size: 9px; letter-spacing: -1px; }
+.cf-high { color: var(--pos); } .cf-medium { color: var(--warn); } .cf-low { color: var(--fg-2); }
+.tx-notes { margin: 10px 0 0; padding-left: 16px; font-size: 10.5px; line-height: 1.55; color: var(--fg-2); }
+.tx-co { margin-top: 12px; }
+/* the flat twin */
+.tx-mx-wrap { height: 100%; overflow: auto; }
+.tx-mx { border-collapse: collapse; font-size: 11px; width: 100%; }
+.tx-mx th { position: sticky; top: 0; z-index: 2; background: var(--bg-1); font-size: 9px; font-weight: 500; letter-spacing: 0.04em; color: var(--fg-2); padding: 4px 3px; border-bottom: 1px solid var(--line-strong); white-space: nowrap; writing-mode: vertical-rl; transform: rotate(180deg); height: 96px; text-align: left; }
+.tx-mx th.sticky { writing-mode: horizontal-tb; transform: none; height: auto; left: 0; z-index: 3; text-align: left; vertical-align: bottom; }
+.tx-mx th.hot { color: var(--gold-0); }
+.tx-mx td { height: 21px; padding: 0 5px; text-align: center; border-bottom: 1px solid rgba(26, 29, 35, 0.7); white-space: nowrap; }
+.tx-mx td.sticky { position: sticky; left: 0; background: var(--bg-1); text-align: left; z-index: 1; color: var(--fg-1); }
+.tx-mx tr.sel td.sticky { color: var(--gold-0); box-shadow: inset 2px 0 0 var(--gold-1); }
+.tx-mx tbody tr { cursor: pointer; }
+.tx-mx tr.mkt td { border-bottom: 1px solid var(--line-strong); font-weight: 500; }
+.tx-mx .dim { opacity: 0.55; }
+.tx-tip { margin-top: 6px; font-size: 10px; color: var(--fg-2); min-height: 14px; }
+
+/* GEO — Exposure Theatre */
+.geo-lbl { font-size: 10px; color: var(--fg-1); white-space: nowrap; padding: 1px 6px; background: rgba(6, 7, 9, 0.62); text-shadow: 0 1px 4px #000; transform: translateY(-4px); }
+.geo-lbl i { font-style: normal; margin-left: 6px; color: var(--gold-1); }
+.geo-lbl.on { color: #fff3c4; border-bottom: 1px solid var(--gold-1); }
+.geo-flat { width: 100%; height: 100%; background: #060709; border: 1px solid var(--line); }
+.geo-land { fill: rgba(212, 175, 55, 0.13); stroke: rgba(212, 175, 55, 0.35); stroke-width: 0.5; }
+.geo-cor { fill: none; stroke: rgba(242, 210, 122, 0.7); stroke-width: 1.2; }
+.geo-cor.hot { stroke: #ff6a85; }
+.geo-cor.dash { stroke-dasharray: 4 4; opacity: 0.55; }
+.geo-ring { fill: rgba(242, 210, 122, 0.12); stroke: var(--gold-1); stroke-width: 1.3; }
+.geo-ring.hot { fill: rgba(255, 70, 100, 0.16); stroke: #ff4d6d; }
+.geo-ring.sel { stroke-width: 2.4; }
+.geo-core, .geo-in { fill: #fff3c4; }
+.geo-t { fill: var(--fg-1); font-size: 10px; }
+.geo-t2 { fill: var(--fg-2); font-size: 8px; }
+.geo-spark { width: 100%; height: 46px; margin-top: 4px; }
+.geo-detail { margin-top: 12px; }
+.geo-h { font-size: 13px; color: var(--gold-0); margin-bottom: 6px; letter-spacing: 0.04em; }
+.geo-detail .t-kv { display: grid; grid-template-columns: 78px 1fr; gap: 8px; font-size: 12px; line-height: 1.5; padding: 2px 0; color: var(--fg-1); }
+.geo-sec { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.geo-sec span { font-size: 10.5px; border: 1px solid var(--line-strong); padding: 1px 7px; color: var(--fg-1); }
+.geo-items { margin: 4px 0 0; padding-left: 14px; font-size: 11.5px; line-height: 1.5; color: var(--fg-1); }
+.geo-items li { margin-bottom: 5px; }
+.geo-items a { color: var(--gold-1); }
+
+/* narrow panels (the PRO side group): stack by the panel's own width, not the window's */
+.tx, .geo { container-type: inline-size; }
+@container (max-width: 760px) {
+  .tx-main { grid-template-columns: 1fr; }
+  .tx-left { min-height: 0; height: 230px; }
+  .geo-flat { height: 100%; }
+}
+.geo { display: flex; flex-direction: column; height: 100%; }
+.geo > .tx-main { flex: 1; min-height: 0; }

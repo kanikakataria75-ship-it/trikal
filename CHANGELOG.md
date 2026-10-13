@@ -149,3 +149,26 @@ heuristics to review (RISKS R-31); sector operating metrics wait for M5/M6 (R-32
 **Interface modes (2026-10-13):** `◆ CINEMA | ▮ PRO` switch (remembered; `MODE PRO`). PRO = flat dense workstation that opens
 straight into the terminal, six-group layout, F-key bar, 2D sparkline instead of the 3D stone, and the new `MAP` heatmap panel
 (shared treemap layout with the 3D city). Home page redirects PRO users to `/terminal`. See UI_SPEC §10.
+
+**Step 2 — sector sensitivities, Transmission Engine, SHOCK, Time Spine context, Exposure Theatre (2026-10-13)**
+- `trikal build-sensitivity`: monthly OLS per sector, trailing 60 months (min 36): sector return = a + b·Δdriver + m·market return,
+  against 10 drivers (Brent, USD/INR, call-money rate as the REPO proxy, India 10Y, US 10Y, copper, iron ore, coal, gold, VIX).
+  Relative beta + the market's own beta = total. `usable_from` keeps every window point-in-time. 19 sectors, 51,591 estimates
+  (200 at the latest as-of); confidence high/medium/low from n, |t| and the share of back-projected sector labels.
+- API `/api/transmission`, `/api/shock?q=CRUDE +20 & INR 90`, `/api/shock/companies`, `/api/context/markers`, `/api/geo`
+  (all need `as_of`; future refused). A shock far outside the history (> 3× the driver's typical monthly move) now carries an
+  explicit "straight-line extension" warning (found on real data: USD/INR +5% is a 5σ month).
+- Terminal: `TX` (3D drivers → sectors → companies planes; flat driver × sector matrix in PRO) with the SHOCK box; `GEO`
+  Exposure Theatre (dot-globe centred on India, trade arteries as arcs with moving light, chokepoint rings sized by dated-news
+  intensity vs the area's own history, detail with sparkline, linked sectors, measured crude response, sourced items; flat map
+  twin in PRO); Time Spine now carries policy / geopolitical / market markers (thinned to one per ~5 px, hover shows text and source).
+  TX and GEO open full-window (Esc or any other function returns).
+- Real-data check (12-Oct-2026): market beta to USD/INR −2.39 (t −3.8, high); Brent −0.11 (t −2.1); sector-level cells are
+  mostly low confidence (160 of 190 sector×driver cells). Reported as is: no sector shows a sign-stable, high-confidence response
+  to crude yet, so the table is a hint, not a forecast.
+- Performance: `peers` took 20–33 s (DuckDB retried `import pandas` on every query; metrics re-read the same company inputs for
+  each metric). Marker for pandas as absent + inputs shared per company/as-of inside an Engine: 6 s. 167 tests.
+- Fixes: `PanelState` never renders children without data (it crashed DES/RV when a fetch failed and retried); drei `<Html>` labels
+  (crash when the docking layout moves a panel) replaced by `components/three/Label.tsx` in TX/GEO.
+- Holding pattern: after the refresh, 16 quarters of category detail (MF / insurance / FPI / promoter / public, pledge) for the
+  companies already downloaded; the downloader continues (detailed history, then ~39k XBRL results, each phase followed by a refresh).

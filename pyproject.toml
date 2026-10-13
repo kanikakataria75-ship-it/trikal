@@ -18,6 +18,7 @@ dependencies = [
     "pytz>=2024.1",  # DuckDB returns TIMESTAMPTZ values through pytz
     "fastapi>=0.115",  # M3 read API
     "uvicorn>=0.30",
+    "numpy>=1.26",  # sector sensitivities (OLS)
 ]
 
 [project.optional-dependencies]

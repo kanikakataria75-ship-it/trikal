@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 
-export type FnCode = "DES" | "GP" | "FA" | "DUP" | "CR" | "RV" | "WC" | "OWN" | "DCF" | "EVT" | "MACRO" | "MAP" | "HELP";
+export type FnCode = "DES" | "GP" | "FA" | "DUP" | "CR" | "RV" | "WC" | "OWN" | "DCF" | "EVT" | "MACRO" | "MAP" | "TX" | "GEO" | "HELP";
 
 /* cinema = the premium 3D experience; pro = dense, flat, keyboard-first workstation (same data, same rules). */
 export type Mode = "cinema" | "pro";
@@ -12,6 +12,7 @@ type State = {
   asOf: string;                 // "NOW" or YYYY-MM-DD — the global as-of every "follow" panel uses
   code: string;                 // link group A: the active security
   mode: Mode;
+  shock: string;                // the active SHOCK text, e.g. "CRUDE +20 & INR 90"
   lineage: boolean;
   dense: boolean;
   colorBlind: boolean;
@@ -20,6 +21,7 @@ type State = {
   toast: { text: string; tone: "info" | "warn" | "lock" } | null;
   setAsOf: (a: string) => void;
   setMode: (m: Mode) => void;
+  setShock: (t: string) => void;
   setCode: (c: string) => void;
   toggle: (k: "lineage" | "dense" | "colorBlind") => void;
   setPalette: (o: boolean) => void;
@@ -35,6 +37,7 @@ export const useT = create<State>((set, get) => ({
   asOf: "NOW",
   code: "TCS",
   mode: "cinema",
+  shock: "",
   lineage: false,
   dense: false,
   colorBlind: false,
@@ -42,6 +45,7 @@ export const useT = create<State>((set, get) => ({
   history: typeof window !== "undefined" ? load("trikal.history", []) : [],
   toast: null,
   setAsOf: (a) => set({ asOf: a }),
+  setShock: (t) => set({ shock: t }),
   setMode: (m) => {
     try { localStorage.setItem(MODE_KEY, m); } catch { /* private mode */ }
     set({ mode: m });

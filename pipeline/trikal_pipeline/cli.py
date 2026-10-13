@@ -248,6 +248,18 @@ def update_daily(refresh: bool = typer.Option(True, help="then parse everything 
         refresh_m2()
 
 
+@app.command("build-sensitivity")
+def build_sensitivity() -> None:
+    """Sector monthly returns and the point-in-time sector sensitivities to the macro drivers (needs macro_obs and prices)."""
+    from trikal_core.db import init_schema
+    from trikal_pipeline import sensitivity
+
+    con = _connect_wait()
+    init_schema(con)
+    t0 = time.monotonic()
+    typer.echo(f"{sensitivity.build(con)} ({time.monotonic() - t0:.0f}s)")
+
+
 @app.command("show")
 def show(
     code: str,

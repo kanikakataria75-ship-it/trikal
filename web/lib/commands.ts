@@ -12,14 +12,16 @@ export const FUNCTIONS: Record<FnCode, { label: string; desc: string }> = {
   OWN: { label: "Ownership", desc: "Promoter, institutions, public; pledge" },
   DCF: { label: "Valuation Lab", desc: "Methods the sector allows; assumptions labelled; ranges, never targets" },
   EVT: { label: "Events", desc: "Corporate actions, results, index changes — each with its public time" },
+  TX: { label: "Transmission", desc: "Macro driver → sector → company, with the SHOCK simulator (estimated price response, with method and confidence)" },
+  GEO: { label: "Exposure theatre", desc: "India's trade arteries and chokepoints on a globe; event intensity and the sectors exposed" },
   MAP: { label: "Market map", desc: "That day's index members as a heatmap: sector → stock, area = turnover, colour = move" },
   MACRO: { label: "Macro desk", desc: "FX, rates, inflation, commodities — every value as known at the as-of" },
   HELP: { label: "Help", desc: "Function codes and keys" },
 };
 
 export const LATER: Record<string, string> = {
-  SEC: "M4/M5 sector desk", POL: "M5", GEO: "M5 Exposure Theatre", TX: "M5 Transmission Engine",
-  SHOCK: "M5", CC: "M6 concalls", KAS: "M7 KASAUTI", NOTE: "M8", RPT: "M8", FRX: "M9 forensics", CAL: "M9", SCRN: "M9 screener",
+  SEC: "M4/M5 sector desk", POL: "M5", 
+  CC: "M6 concalls", KAS: "M7 KASAUTI", NOTE: "M8", RPT: "M8", FRX: "M9 forensics", CAL: "M9", SCRN: "M9 screener",
 };
 
 export type Parsed =
@@ -28,6 +30,7 @@ export type Parsed =
   | { kind: "entity"; code: string; fn: FnCode }
   | { kind: "later"; word: string; milestone: string }
   | { kind: "mode"; mode: "cinema" | "pro" }
+  | { kind: "shock"; text: string }
   | { kind: "help" }
   | { kind: "empty" }
   | { kind: "bad"; why: string };
@@ -59,6 +62,10 @@ export function parse(input: string, today: string): Parsed {
     if (!t[1]) return { kind: "bad", why: "ASOF needs a date: ASOF 2020-03-14 · ASOF -5Y · ASOF NOW" };
     const v = resolveAsOf(t[1], today);
     return v ? { kind: "asof", value: v } : { kind: "bad", why: `“${t[1]}” is not a past date (YYYY-MM-DD, -5Y, -6M, NOW). The future holds scenarios, not data.` };
+  }
+  if (t[0] === "SHOCK") {
+    const text = input.trim().replace(/^shocks*/i, "");
+    return text ? { kind: "shock", text } : { kind: "bad", why: "SHOCK CRUDE +20 · SHOCK INR 90 · SHOCK REPO +50bp · combine with &" };
   }
   if (t[0] === "MODE") {
     const m = (t[1] ?? "").startsWith("PRO") ? "pro" : (t[1] ?? "").startsWith("CIN") ? "cinema" : null;

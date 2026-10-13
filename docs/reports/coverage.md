@@ -1,4 +1,4 @@
-# TRIKAL data coverage — generated 2026-10-13 16:12 IST
+# TRIKAL data coverage — generated 2026-10-13 17:04 IST
 
 ## Trading calendar (from the fetch log)
 Target range = earliest file we try to fetch -> today. Unknown = not answered yet (not fetched / fetch error / untrusted placeholder).
@@ -98,34 +98,34 @@ The 'known to exist' counts only cover companies whose filing lists have been do
 | raw download | answered | known to exist |
 |---|---|---|
 | company lists (5 endpoints x symbols) | 7,950 | 7,950 |
-| results XBRL documents (listed so far) | 15,016 | 54,294 |
+| results XBRL documents (listed so far) | 15,978 | 54,294 |
 | old results HTML pages (listed so far) | 58 | 41,735 |
-| shareholding XBRL documents (listed so far) | 2,785 | 20,207 |
+| shareholding XBRL documents (listed so far) | 4,312 | 20,207 |
 
 | kind | family | filings parsed | securities | earliest period | latest period |
 |---|---|---|---|---|---|
 | results_html | HTML | 75 | 57 | 2008-03-31 | 2017-12-31 |
 | results_xbrl | INTEGRATED | 11,985 | 999 | 2024-06-30 | 2026-09-30 |
-| results_xbrl | INDAS | 2,713 | 860 | 2018-03-31 | 2024-12-31 |
-| results_xbrl | NBFC_INDAS | 233 | 68 | 2020-06-30 | 2024-12-31 |
-| results_xbrl | BANKING | 65 | 35 | 2018-09-30 | 2024-12-31 |
-| results_xbrl | NONINDAS | 1 | 1 | 2024-09-30 | 2024-09-30 |
-| shp_xbrl | SHP | 2,126 | 991 | 2026-03-31 | 2026-10-01 |
+| results_xbrl | INDAS | 3,508 | 864 | 2018-03-31 | 2024-12-31 |
+| results_xbrl | NBFC_INDAS | 341 | 71 | 2020-06-30 | 2024-12-31 |
+| results_xbrl | BANKING | 122 | 35 | 2018-09-30 | 2024-12-31 |
+| results_xbrl | NONINDAS | 3 | 2 | 2024-06-30 | 2024-09-30 |
+| shp_xbrl | SHP | 4,312 | 997 | 2025-09-12 | 2026-10-01 |
 
-PIT fact rows (value changes only): **2,198,040** for **1014** securities.
+PIT fact rows (value changes only): **2,371,193** for **1015** securities.
 
 Accounting-identity checks (each compares two quantities a filing states independently):
 
 | identity | checked | holds | pass rate |
 |---|---|---|---|
-| Total assets = total equity + total liabilities (balance sheet) | 7,027 | 7,027 | 100.0% |
-| Operating + investing + financing cash flow = net change in cash (before FX effect) | 7,418 | 7,418 | 100.0% |
+| Total assets = total equity + total liabilities (balance sheet) | 7,604 | 7,604 | 100.0% |
+| Operating + investing + financing cash flow = net change in cash (before FX effect) | 8,052 | 8,052 | 100.0% |
 | Old pages: profit before tax reconciles under at least one of the template conventions companies use (finance costs outside / inside 'total expenses'; other income separate / already in income) | 17 | 10 | 58.8% |
-| Income - Expenses = Profit before exceptional items and tax (Ind AS income statement) | 24,975 | 24,975 | 100.0% |
-| Profit before exceptional items + exceptional items = Profit before tax | 24,975 | 24,975 | 100.0% |
-| Profit before tax - tax expense = profit from continuing operations | 24,975 | 24,720 | 99.0% |
+| Income - Expenses = Profit before exceptional items and tax (Ind AS income statement) | 26,466 | 26,466 | 100.0% |
+| Profit before exceptional items + exceptional items = Profit before tax | 26,466 | 26,466 | 100.0% |
+| Profit before tax - tax expense = profit from continuing operations | 26,466 | 26,200 | 99.0% |
 
-Shareholding: 1039 securities, 709 quarter-ends (2015-12-31 .. 2026-10-01); 904 with category detail (mutual funds / FPI / retail ...).
+Shareholding: 1039 securities, 709 quarter-ends (2015-12-31 .. 2026-10-01); 922 with category detail (mutual funds / FPI / retail ...).
 
 Promoter pledge snapshots: 742 for 739 securities (2017-12-31 .. 2026-09-30); history only accumulates forward (the exchange serves the latest quarter only).
 
@@ -144,16 +144,16 @@ Sector classification (every row carries method and confidence):
 | adj_unverifiable | low | 73,969 |
 | unexplained_price_jump | medium | 2,715 |
 | adj_implied_confirmed | low | 765 |
-| fin_pbt_minus_tax_equals_pat_continuing | low | 255 |
+| fin_pbt_minus_tax_equals_pat_continuing | low | 266 |
+| shp_pct_mismatch | low | 147 |
 | symbol_change_unmatched | low | 62 |
 | index_in_not_member | medium | 60 |
-| shp_pct_mismatch | low | 50 |
 | adj_parsed_unconfirmed | low | 31 |
 | adj_parsed_price_disagrees | medium | 25 |
 | index_out_already_member | medium | 19 |
 | fin_html_income_statement_chain | low | 7 |
 | adj_parsed_confirmed_wide | low | 4 |
+| results_xbrl_parse_error | medium | 2 |
 | multi_stem_episode | medium | 2 |
 | index_snapshot_placeholder | low | 1 |
-| results_xbrl_parse_error | medium | 1 |
 | adj_mismatch | medium | 1 |

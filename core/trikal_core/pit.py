@@ -753,6 +753,106 @@ def _macro_latest(self: PitReader, as_of: AsOf) -> list[dict]:
     return [{"series_id": s, "period_end": pe, "value": v, "known_at": k, "precision": p, "year_ago": y} for s, pe, v, k, p, y in rows]
 
 
+def _sector_sensitivities(self: PitReader, as_of: AsOf) -> list[dict]:
+    """For every (sector, driver) the latest estimate that was usable at as_of (its driver data already public)."""
+    keys = ["sector", "driver", "beta", "tstat", "r2", "n_obs", "unit", "beta_mkt", "backproj_share", "confidence",
+            "method", "window_end", "usable_from"]
+    rows = self.con.execute(
+        f"""SELECT {', '.join(keys)} FROM sector_sensitivity WHERE usable_from <= ?
+            QUALIFY row_number() OVER (PARTITION BY sector, driver ORDER BY window_end DESC) = 1
+            ORDER BY sector, driver""", [as_of.ts]).fetchall()
+    return [dict(zip(keys, r)) for r in rows]
+
+
+def _sector_returns(self: PitReader, as_of: AsOf, sector: str, start: dt.date | None = None) -> list[tuple[dt.date, float]]:
+    """Monthly equal-weight returns of a sector (or '__MKT__') for months that had ended by as_of."""
+    return self.con.execute(
+        """SELECT month_end, ret FROM sector_return_monthly WHERE sector = ? AND month_end < ? AND month_end >= ?
+           ORDER BY month_end""", [sector, as_of.date_ist, start or dt.date(1900, 1, 1)]).fetchall()
+
+
+def _sector_top(self: PitReader, sector: str, as_of: AsOf, limit: int = 15) -> list[dict]:
+    """Nifty 500 members carrying `sector` at as_of, largest turnover in the last session first."""
+    d = as_of.date_ist
+    last = self.con.execute("SELECT max(trade_date) FROM price_eod WHERE exchange = 'NSE' AND trade_date <= ? AND known_at <= ?", [d, as_of.ts]).fetchone()[0]
+    if not last:
+        return []
+    members = [m[0] for m in self.index_members("NIFTY500", as_of)]
+    if not members:
+        return []
+    ph = ",".join("?" * len(members))
+    rows = self.con.execute(
+        f"""SELECT s.security_id, e.code, any_value(s.latest_name), sum(coalesce(e.turnover, 0)) AS t
+            FROM classification c JOIN security s USING (security_id)
+            JOIN listing l ON l.security_id = c.security_id AND l.exchange = 'NSE'
+            JOIN price_eod e ON e.exchange = 'NSE' AND e.code = l.code AND e.trade_date = ? AND e.trade_date BETWEEN l.valid_from AND l.valid_to
+            WHERE c.scheme = 'NSE_INDUSTRY' AND c.code = ? AND c.valid_from <= ? AND ? < c.valid_to AND s.security_id IN ({ph})
+            GROUP BY s.security_id, e.code ORDER BY t DESC LIMIT ?""", [last, sector, d, d, *members, limit]).fetchall()
+    return [{"security_id": r[0], "code": r[1], "name": self.display_name(r[0], r[2]), "turnover": r[3]} for r in rows]
+
+
+@functools.lru_cache(maxsize=1)
+def load_context_tags() -> dict:
+    import yaml
+
+    p = Path(__file__).resolve().parents[2] / "config" / "context_tags.yaml"
+    return yaml.safe_load(p.read_text(encoding="utf-8"))
+
+
+def _context_markers(self: PitReader, as_of: AsOf, per_month: int = 2, limit: int = 700) -> list[dict]:
+    """Dated policy / geopolitical / market events for the Time Spine, tagged by keyword (config/context_tags.yaml).
+    Only items dated on or before as_of; at most `per_month` per tag per month (India-scope first). Context, not data."""
+    tags = load_context_tags()["tags"]
+    out: list[dict] = []
+    for tid, t in tags.items():
+        scope = "AND scope = 'india'" if t["scope"] == "india" else ""
+        rows = self.con.execute(
+            f"""SELECT day, scope, text, source_name, source_url, page FROM context_event
+                WHERE day <= ? AND regexp_matches(text, ?, 'i') {scope}
+                QUALIFY row_number() OVER (PARTITION BY date_trunc('month', day) ORDER BY (scope = 'india') DESC, length(text) DESC) <= ?
+                ORDER BY day""", [as_of.date_ist, t["pattern"], per_month]).fetchall()
+        out += [{"day": d, "scope": sc, "tag": tid, "kind": t["kind"], "label": t["label"], "text": tx, "source_name": sn,
+                 "source_url": su, "page": pg} for d, sc, tx, sn, su, pg in rows]
+    out.sort(key=lambda x: x["day"])
+    return out[-limit:] if len(out) > limit else out
+
+
+def _chokepoint_pulse(self: PitReader, as_of: AsOf, recent: int = 6) -> list[dict]:
+    """For every chokepoint: dated items mentioning it per month (to as_of), the trailing-90-day count and its
+    percentile among all trailing-90-day windows so far (the 'intensity'), plus the most recent items."""
+    cfg = load_context_tags()["chokepoints"]
+    d = as_of.date_ist
+    out = []
+    for cid, c in cfg.items():
+        monthly = {(y, m): n for y, m, n in self.con.execute(
+            """SELECT year(day), month(day), count(*) FROM context_event WHERE day <= ? AND regexp_matches(text, ?, 'i')
+               GROUP BY 1, 2 ORDER BY 1, 2""", [d, c["pattern"]]).fetchall()}
+        first = min(monthly) if monthly else None
+        series = []
+        if first:
+            y, m = first
+            while (y, m) <= (d.year, d.month):
+                series.append(((y, m), monthly.get((y, m), 0)))
+                y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+        counts = [n for _, n in series]
+        roll = [sum(counts[max(0, i - 2): i + 1]) for i in range(len(counts))]       # trailing three months
+        now = roll[-1] if roll else 0
+        pct = (sum(1 for x in roll if x <= now) / len(roll)) if roll else 0.0
+        items = self.con.execute(
+            """SELECT day, scope, text, source_name, source_url, page FROM context_event WHERE day <= ? AND regexp_matches(text, ?, 'i')
+               ORDER BY day DESC, length(text) DESC LIMIT ?""", [d, c["pattern"], recent]).fetchall()
+        out.append({"id": cid, "label": c["label"], "lat": c["lat"], "lon": c["lon"], "carries": c["carries"], "channel": c["channel"],
+                    "driver": c.get("driver"), "sectors": c["sectors"], "source": c["source"],
+                    "last_90d": now, "intensity": pct, "monthly": [{"month": f"{y}-{m:02d}", "n": n} for (y, m), n in series[-72:]],
+                    "recent": [{"day": a, "scope": b, "text": t, "source_name": sn, "source_url": su, "page": pg} for a, b, t, sn, su, pg in items]})
+    return out
+
+
+PitReader.context_markers = _context_markers  # type: ignore[attr-defined]
+PitReader.chokepoint_pulse = _chokepoint_pulse  # type: ignore[attr-defined]
+PitReader.sector_top = _sector_top  # type: ignore[attr-defined]
+PitReader.sector_sensitivities = _sector_sensitivities  # type: ignore[attr-defined]
+PitReader.sector_returns = _sector_returns  # type: ignore[attr-defined]
 PitReader.macro_series = _macro_series  # type: ignore[attr-defined]
 PitReader.macro = _macro  # type: ignore[attr-defined]
 PitReader.macro_latest = _macro_latest  # type: ignore[attr-defined]

@@ -55,24 +55,27 @@ def _inp(name: str, v: FinValue) -> Input:
 class Ctx:
     """Point-in-time inputs for one company. Every accessor returns None when the data is not there."""
 
-    def __init__(self, reader: PitReader, security_id: str, as_of: AsOf, basis: str = "auto") -> None:
+    def __init__(self, reader: PitReader, security_id: str, as_of: AsOf, basis: str = "auto", shared: dict | None = None) -> None:
         self.r, self.sid, self.as_of = reader, security_id, as_of
         self._basis_arg = basis
-        self._basis: str | None = None
-        self._series: dict[str, list[FinValue]] = {}
+        # what was read from the database can be shared between metrics of the same company and as-of (it never depends on the
+        # metric); warnings never are
+        self._sh = shared if shared is not None else {}
+        self._series: dict[str, list[FinValue]] = self._sh.setdefault(("series", basis), {})
         self.warnings: list[str] = []
 
     # ---- basis: one for the whole computation ---------------------------------------------------------
     @property
     def basis(self) -> str:
-        if self._basis is None:
+        key = ("basis", self._basis_arg)
+        if key not in self._sh:
             if self._basis_arg != "auto":
-                self._basis = self._basis_arg
+                self._sh[key] = self._basis_arg
             else:
                 recent = [v for v in self.r.financials(self.sid, self.as_of, ["profit_after_tax", "total_income", "revenue_from_operations"], basis="consolidated")
                           if (self.as_of.date_ist - v.period_end).days <= 400]
-                self._basis = "consolidated" if recent else "standalone"
-        return self._basis
+                self._sh[key] = "consolidated" if recent else "standalone"
+        return self._sh[key]
 
     def series(self, li: str) -> list[FinValue]:
         if li not in self._series:
@@ -635,10 +638,20 @@ class Engine:
     def __init__(self, reader: PitReader, registry: pbmod.Registry | None = None) -> None:
         self.r = reader
         self.reg = registry or pbmod.load()
+        self._memo: dict[tuple, dict] = {}
+
+    def _ctx(self, security_id: str, as_of: AsOf, basis: str) -> Ctx:
+        """A fresh Ctx (own warnings) over the inputs already read for this company and as-of by this engine."""
+        key = (security_id, as_of.ts)
+        if key not in self._memo:
+            if len(self._memo) >= 48:
+                self._memo.pop(next(iter(self._memo)))
+            self._memo[key] = {}
+        return Ctx(self.r, security_id, as_of, basis, self._memo[key])
 
     def resolution(self, security_id: str, as_of: AsOf, basis: str = "auto") -> pbmod.Resolution:
         prof = self.r.profile(security_id, as_of)
-        c = Ctx(self.r, security_id, as_of, basis)
+        c = self._ctx(security_id, as_of, basis)
         profitable = None
         p = pat_ttm(c)
         if isinstance(p, Value):
@@ -654,7 +667,7 @@ class Engine:
         if spec.external:
             src = res.playbook.requires.get(metric_id, "an external source not yet ingested")
             return NotAvailable(metric_id, (metric_id,), f"needs {src}")
-        c = Ctx(self.r, security_id, as_of, basis)
+        c = self._ctx(security_id, as_of, basis)
         out = spec.fn(c)
         if isinstance(out, Value):
             extra = []

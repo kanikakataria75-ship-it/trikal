@@ -1,0 +1,68 @@
+# How dated context items (Wikipedia current events, CC BY-SA; see DATA_SOURCES §11) are tagged for the Time Spine and the
+# Exposure Theatre. Tagging is by plain keyword patterns on the item's own text (case-insensitive regular expressions):
+# no model, no guessing; an item is shown with its text and its source, and the tag only decides which marker it gets.
+version: 1
+
+# Markers on the Time Spine. kind: policy | geo | macro.   scope: india (India events only) | any
+tags:
+  rbi:       {kind: policy, scope: any,   label: "RBI",           pattern: "\\bReserve Bank of India\\b|\\bRBI\\b|\\brepo rate\\b"}
+  budget:    {kind: policy, scope: india, label: "Union Budget",  pattern: "\\bUnion Budget\\b|\\binterim Budget\\b|\\bBudget\\b.{0,60}\\b(Finance Minister|Parliament|Lok Sabha)\\b"}
+  election:  {kind: policy, scope: india, label: "Election",      pattern: "\\b(general|Lok Sabha|state assembly|assembly) elections?\\b|\\bsworn in as (the )?Prime Minister\\b"}
+  reform:    {kind: policy, scope: india, label: "Policy / reform", pattern: "\\bGST\\b|demonetisation|demonetization|\\bFDI\\b|disinvestment|privatisation|privatization|\\bSEBI\\b|\\bPLI\\b|insolvency"}
+  sanctions: {kind: geo,    scope: any,   label: "Sanctions",     pattern: "\\bsanctions\\b"}
+  conflict:  {kind: geo,    scope: any,   label: "Conflict",      pattern: "\\binvasion\\b|\\binvade[sd]?\\b|\\bairstrikes?\\b|\\bmissile (attack|strike)s?\\b|\\bceasefire\\b|\\bdeclares? war\\b|\\bterror(ist)? attack\\b"}
+  energy:    {kind: geo,    scope: any,   label: "Oil & energy",  pattern: "\\bOPEC\\b|\\boil prices?\\b|\\bcrude oil\\b|\\bStrait of Hormuz\\b|\\bnatural gas\\b.{0,40}\\b(supply|pipeline|embargo)\\b"}
+  trade:     {kind: geo,    scope: any,   label: "Trade",         pattern: "\\btariffs?\\b|\\btrade war\\b|\\bfree trade agreement\\b|\\btrade deal\\b|\\bWTO\\b"}
+  pandemic:  {kind: geo,    scope: any,   label: "Pandemic",      pattern: "\\bpandemic\\b|\\blockdown\\b|\\bCOVID-19\\b|\\bepidemic\\b"}
+  markets:   {kind: macro,  scope: any,   label: "Markets",       pattern: "\\bstock markets?\\b.{0,60}\\b(crash|plunge|fall|tumble|rall(y|ies)|record)\\b|\\bfinancial crisis\\b|\\brecession\\b|\\bSensex\\b|\\bNifty\\b|\\bcentral bank\\b.{0,40}\\b(cuts?|raises?|hikes?)\\b"}
+
+# Chokepoints on the globe (coordinates: public geography). `pattern` counts the dated items that mention the area: the intensity.
+chokepoints:
+  hormuz:
+    label: "Strait of Hormuz"
+    lat: 26.57
+    lon: 56.25
+    pattern: "\\bHormuz\\b|\\bPersian Gulf\\b|\\bGulf of Oman\\b|\\bIran(ian)?\\b.{0,60}\\b(tanker|oil|navy|seiz)\\w*"
+    carries: "Crude oil and LNG from the Gulf to India and Asia"
+    channel: "Crude import cost and availability; LNG and fertiliser feedstock; marine insurance and freight"
+    driver: brent
+    sectors: ["Oil Gas & Consumable Fuels", "Chemicals", "Fast Moving Consumer Goods", "Services", "Automobile and Auto Components"]
+    source: "U.S. EIA, World Oil Transit Chokepoints; PPAC (India's crude import sources)"
+  red_sea:
+    label: "Red Sea / Bab-el-Mandeb / Suez"
+    lat: 12.58
+    lon: 43.33
+    pattern: "\\bRed Sea\\b|\\bHouthi\\w*\\b|\\bBab[- ]el[- ]Mandeb\\b|\\bSuez\\b|\\bGulf of Aden\\b"
+    carries: "India's trade with Europe, the Mediterranean and the US East Coast"
+    channel: "Freight rates and transit time for exporters; rerouting round the Cape; cost of imported inputs from Europe"
+    driver: null
+    sectors: ["Textiles", "Chemicals", "Healthcare", "Automobile and Auto Components", "Capital Goods", "Metals & Mining"]
+    source: "U.S. EIA, World Oil Transit Chokepoints; Ministry of Commerce trade statistics"
+  malacca:
+    label: "Strait of Malacca"
+    lat: 2.50
+    lon: 101.00
+    pattern: "\\bMalacca\\b|\\bSingapore Strait\\b|\\bSouth China Sea\\b"
+    carries: "India's trade with East Asia; East-Asian oil and LNG flows"
+    channel: "Imports of electronics, chemicals and components from China, Korea and Japan; exports of ore and cotton"
+    driver: null
+    sectors: ["Information Technology", "Consumer Durables", "Capital Goods", "Metals & Mining", "Chemicals"]
+    source: "U.S. EIA, World Oil Transit Chokepoints; Ministry of Commerce trade statistics"
+  taiwan:
+    label: "Taiwan Strait"
+    lat: 24.50
+    lon: 119.50
+    pattern: "\\bTaiwan Strait\\b|\\bTaiwan\\b.{0,60}\\b(China|Chinese|military|blockade|drills?|tensions?)\\b"
+    carries: "A large part of the world's semiconductor and electronics shipping"
+    channel: "Supply of chips and components for electronics, autos and telecom equipment"
+    driver: null
+    sectors: ["Information Technology", "Consumer Durables", "Automobile and Auto Components", "Telecommunication", "Capital Goods"]
+    source: "Industry and trade-press analyses of semiconductor supply chains (qualitative)"
+
+# Corridors drawn on the globe as great-circle arcs through the listed waypoints (lat, lon). `via` names the chokepoints they pass.
+corridors:
+  - {id: gulf_crude,   label: "Gulf crude → India",              via: [hormuz],            path: [[26.65, 50.16], [26.57, 56.25], [22.47, 70.06]]}
+  - {id: europe,       label: "India ↔ Europe (Suez route)",     via: [red_sea],           path: [[18.94, 72.84], [12.58, 43.33], [30.0, 32.55], [51.95, 4.14]]}
+  - {id: cape,         label: "India ↔ Europe (Cape of Good Hope)", via: [],               path: [[18.94, 72.84], [-34.35, 18.47], [51.95, 4.14]], dashed: true}
+  - {id: east_asia,    label: "India ↔ East Asia",                via: [malacca],           path: [[13.08, 80.27], [2.50, 101.00], [31.23, 121.47]]}
+  - {id: electronics,  label: "Electronics: Shenzhen / Taiwan → India", via: [taiwan, malacca], path: [[22.54, 114.06], [24.50, 119.50], [2.50, 101.00], [13.08, 80.27]]}

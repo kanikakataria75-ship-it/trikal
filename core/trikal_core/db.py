@@ -6,10 +6,17 @@ the SHA-256 of the immutable raw object it was parsed from (see trikal_pipeline.
 
 from __future__ import annotations
 
+import importlib.util
 import os
+import sys
 from pathlib import Path
 
 import duckdb
+
+# DuckDB's Python client tries `import pandas` on every query it runs. Where pandas is not installed (it is not a dependency here)
+# each attempt scans the whole import path and costs about as much as the query itself; marking it absent makes the attempt instant.
+if importlib.util.find_spec("pandas") is None:
+    sys.modules.setdefault("pandas", None)  # type: ignore[arg-type]
 
 SCHEMA_VERSION = 2
 
@@ -221,6 +228,17 @@ CREATE TABLE IF NOT EXISTS macro_series (
 CREATE TABLE IF NOT EXISTS macro_obs (
     series_id VARCHAR, period_start DATE, period_end DATE, value DOUBLE,
     known_at TIMESTAMPTZ, known_precision VARCHAR, vintage DATE, source_sha VARCHAR, recorded_at TIMESTAMPTZ
+);
+
+-- Sector sensitivities (M5). sector_return_monthly: equal-weight monthly return of the sector's members (membership and
+-- label at the START of the month; backproj_share = share of labels projected backwards from the current NSE snapshot).
+-- sector_sensitivity: rolling OLS per month end; usable only from usable_from (when the driver value was public).
+CREATE TABLE IF NOT EXISTS sector_return_monthly (
+    month_end DATE, sector VARCHAR, ret DOUBLE, n INTEGER, backproj_share DOUBLE
+);
+CREATE TABLE IF NOT EXISTS sector_sensitivity (
+    window_end DATE, usable_from TIMESTAMPTZ, sector VARCHAR, driver VARCHAR, beta DOUBLE, tstat DOUBLE, r2 DOUBLE,
+    n_obs INTEGER, window_months INTEGER, unit VARCHAR, beta_mkt DOUBLE, backproj_share DOUBLE, confidence VARCHAR, method VARCHAR
 );
 
 -- Context for a day (Time Machine): editorial summaries from Wikipedia, CC BY-SA 4.0. Never an input to any

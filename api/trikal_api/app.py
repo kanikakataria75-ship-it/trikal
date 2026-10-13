@@ -229,6 +229,71 @@ def _time_machine(a: AsOf, hindsight: bool, before_days: int = 120) -> dict:
     return out
 
 
+@app.get("/api/transmission")
+def transmission(as_of: str = AS_OF):
+    """The Transmission Engine's three planes: drivers, sectors and their point-in-time sensitivities."""
+    from trikal_api import transmission as T
+
+    a = asof(as_of)
+    with DB.reader_ctx() as r:
+        return ok(T.overview(r, a), a)
+
+
+@app.get("/api/shock")
+def shock(q: str, as_of: str = AS_OF):
+    """SHOCK CRUDE +20 & INR 90: estimated price response of every sector (relative + market = total)."""
+    from trikal_analytics.sensitivity import ShockError
+    from trikal_api import transmission as T
+
+    a = asof(as_of)
+    with DB.reader_ctx() as r:
+        try:
+            return ok(T.shock_table(r, a, q), a)
+        except ShockError as e:
+            raise HTTPException(422, str(e)) from e
+
+
+@app.get("/api/shock/companies")
+def shock_companies(q: str, sector: str, as_of: str = AS_OF, limit: int = 15):
+    from trikal_analytics.sensitivity import ShockError
+    from trikal_api import transmission as T
+
+    a = asof(as_of)
+    with DB.reader_ctx() as r:
+        try:
+            return ok(T.company_table(r, a, sector, q, min(limit, 30)), a)
+        except ShockError as e:
+            raise HTTPException(422, str(e)) from e
+
+
+@app.get("/api/context/markers")
+def context_markers(as_of: str = AS_OF):
+    """Policy / geopolitical / market markers for the Time Spine: dated items (Wikipedia, CC BY-SA) up to as_of, keyword-tagged."""
+    a = asof(as_of)
+    with DB.reader_ctx() as r:
+        try:
+            m = r.context_markers(a)
+        except Exception:
+            m = []
+        return ok({"markers": m, "licence": "Wikipedia contributors · CC BY-SA 4.0", "note": "editorial context, tagged by keyword; not data"}, a)
+
+
+@app.get("/api/geo")
+def geo(as_of: str = AS_OF):
+    """The Exposure Theatre: chokepoints with event intensity at as_of, corridors, and the sectors linked to each."""
+    from trikal_core.pit import load_context_tags
+
+    a = asof(as_of)
+    with DB.reader_ctx() as r:
+        try:
+            pulse = r.chokepoint_pulse(a)
+        except Exception:
+            pulse = []
+        return ok({"chokepoints": pulse, "corridors": load_context_tags()["corridors"],
+                   "note": "Intensity = dated news items mentioning the area in the last three months, as a percentile of its own history. "
+                           "Context, not a forecast. Company-level exposure needs export/import splits from annual reports (M6)."}, a)
+
+
 @app.get("/api/live/{code}")
 def live_quote(code: str, as_of: str = AS_OF):
     """Live NSE quote from the owner's own broker account. Exists only for NOW (a past as-of never shows a live price)

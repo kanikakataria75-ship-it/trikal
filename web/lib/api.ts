@@ -101,6 +101,35 @@ export const useLive = (code: string | null, asOf: string) =>
     },
   });
 
+export type SensCell = { beta: number | null; tstat: number | null; n: number | null; confidence: "high" | "medium" | "low"; impact: number | null };
+export type DriverState = { id: string; label: string; kind: "log" | "pp"; series: string; note: string; aliases?: string; latest: { value: number; period_end: string; known_at: string; precision: string } | null; year_ago?: number | null; sigma?: number | null };
+export type TxOverview = Envelope & {
+  drivers: DriverState[]; method: string; estimates: number;
+  sectors: { sector: string; sens: Record<string, { beta: number; tstat: number; n: number; confidence: "high" | "medium" | "low"; window_end: string }> }[];
+  market: Record<string, { beta: number; tstat: number; n: number; confidence: "high" | "medium" | "low" }>;
+};
+export type ShockRow = { sector: string; cells: Record<string, SensCell>; relative: number; market: number; total: number; confidence: "high" | "medium" | "low"; missing: string[] };
+export type ShockResult = Envelope & {
+  shocks: { driver: string; label: string; delta: number; text: string; kind: "log" | "pp" }[];
+  market: { cells: Record<string, SensCell>; total: number }; rows: ShockRow[]; notes: string[];
+};
+export type ShockCompanies = Envelope & { sector: string; shocks: string[]; notes: string[]; rows: (ShockRow & { security_id: string; code: string; name: string; turnover: number })[] };
+
+export const useTransmission = (asOf: string) => useQuery({ queryKey: ["tx", asOf], queryFn: () => api<TxOverview>(`/api/transmission?${q(asOf)}`), staleTime: Infinity });
+export const useShock = (text: string, asOf: string) =>
+  useQuery({ queryKey: ["shock", text, asOf], queryFn: () => api<ShockResult>(`/api/shock?${q(asOf, { q: text })}`), enabled: text.trim().length > 0, staleTime: Infinity, retry: false });
+export const useShockCompanies = (text: string, sector: string | null, asOf: string) =>
+  useQuery({ queryKey: ["shockco", text, sector, asOf], queryFn: () => api<ShockCompanies>(`/api/shock/companies?${q(asOf, { q: text, sector: sector! })}`), enabled: !!sector && text.trim().length > 0, staleTime: Infinity, retry: false });
+
+export type CtxMarker = { day: string; scope: string; tag: string; kind: "policy" | "geo" | "macro"; label: string; text: string; source_name: string; source_url: string; page: string };
+export type CtxMarkers = Envelope & { markers: CtxMarker[]; licence: string; note: string };
+export type ChokeItem = { day: string; scope: string; text: string; source_name: string; source_url: string; page: string };
+export type Chokepoint = { id: string; label: string; lat: number; lon: number; carries: string; channel: string; driver: string | null; sectors: string[]; source: string; last_90d: number; intensity: number; monthly: { month: string; n: number }[]; recent: ChokeItem[] };
+export type GeoCorridor = { id: string; label: string; via: string[]; path: number[][]; dashed?: boolean };
+export type GeoData = Envelope & { chokepoints: Chokepoint[]; corridors: GeoCorridor[]; note: string };
+export const useContextMarkers = (asOf: string) => useQuery({ queryKey: ["ctxm", asOf], queryFn: () => api<CtxMarkers>(`/api/context/markers?${q(asOf)}`), staleTime: Infinity });
+export const useGeo = (asOf: string) => useQuery({ queryKey: ["geo", asOf], queryFn: () => api<GeoData>(`/api/geo?${q(asOf)}`), staleTime: Infinity });
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }

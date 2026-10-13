@@ -296,3 +296,21 @@ Bank filings differ from industrial ones, so three rules live in `config/line_it
 - **Asset quality is filed on the standalone statement.** The consolidated block of the same results file carries a placeholder `0.0` ("not reported here"). Line items marked `prefer_basis: standalone` + `zero_is_missing: true` (GNPA/NNPA amount and %, CET1, AT1, reported ROA) take the standalone value and drop zeros, so a placeholder is never shown as a real 0% NPA (this showed HDFC Bank's GNPA as 0 until 13-Oct-2026).
 - Metrics: `nii` = interest earned − interest expended (TTM); `nii_to_assets` = NII / average total assets (a proxy: reported NIM divides by average interest-earning assets, which filings do not give); `cost_to_income` = operating expenses / (NII + other income); `ldr` = advances / deposits; `credit_cost` = TTM provisions / average advances; `gnpa_pct`, `nnpa_pct`, `cet1` as reported. Balance-sheet items use the latest date and the one about a year earlier (half-yearly for banks); with a single date the output carries `single_balance_sheet_date`.
 - Still needing other sources (M6): NIM, CASA, PCR, slippage, total CAR (the filing gives CET1 and AT1, not Tier 2).
+
+## Sector sensitivities, SHOCK and exposure context (M5, 2026-10-13)
+
+For every sector s and macro driver d, at every month-end t the pipeline fits, over the trailing 60 months (at least 36),
+`r_s,m = a + b · Δd_m + k · r_mkt,m + ε`, where `r_s` is the equal-weight return of the sector's members that month (members as
+known then, split/bonus adjusted prices), `r_mkt` the equal-weight return of all members, and `Δd` the driver's monthly change
+(log change for prices, percentage points for rates). `b` is the response **relative to the market**; the market's own response
+`m` comes from the same regression on `r_mkt` (stored under sector `__MKT__`). A window is usable only from `usable_from`
+(the later of the window's last month-end close and the release time of the newest driver observation in it), so a rewound as-of never sees a later estimate.
+
+- Impact of a shock Δ on sector s = `b · Δ` (relative) + `m · Δ` (market) = total. Combined shocks add the per-driver impacts.
+- Shock grammar: `CRUDE +20` (percent), `INR 90` (target level, converted with the driver's current value), `REPO +50bp`
+  (call-money rate stands in for the REPO), joined by `&`. Units: log change for price drivers, percentage points for rates.
+- Confidence: high = n ≥ 48, |t| ≥ 2.5, mostly real sector labels; medium = n ≥ 36 and |t| ≥ 1.65; else low (dimmed in the UI).
+  A shock larger than 3× the driver's typical monthly standard deviation is flagged as a straight-line extension.
+- It is an estimated price response from history. It is not an earnings forecast, not a causal channel, and not advice.
+- Chokepoint intensity = dated news items matching the area's keyword pattern in the trailing 3 months, as a percentile of the same
+  count for every earlier 3-month window up to the as-of. Context only; never an input to any metric.

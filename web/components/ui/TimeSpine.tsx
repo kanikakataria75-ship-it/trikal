@@ -5,7 +5,7 @@
    release. Right of NOW is Bhavishya: hatched, data-free, scenarios only — the playhead cannot enter it. */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { TimelineEvent } from "@/lib/api";
+import type { CtxMarker, TimelineEvent } from "@/lib/api";
 import { dmy } from "@/lib/format";
 import { TipLayer, useTip } from "./Tooltip";
 
@@ -14,6 +14,7 @@ const K_YEARS = 2.2;
 
 type Props = {
   events: TimelineEvent[];
+  markers?: CtxMarker[];    // policy / geopolitical / market context (Wikipedia, tagged by keyword), drawn above the line
   start: string;            // earliest date on the spine
   now: string;              // today (IST)
   asOf: string;             // "NOW" or YYYY-MM-DD
@@ -26,7 +27,7 @@ type Props = {
 
 const iso = (t: number) => new Date(t).toISOString().slice(0, 10);
 
-export default function TimeSpine({ events, start, now, asOf, onChange, height = 64, futureFrac = 0.1, showLabels = true, scenarioNote }: Props) {
+export default function TimeSpine({ events, markers = [], start, now, asOf, onChange, height = 64, futureFrac = 0.1, showLabels = true, scenarioNote }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const [w, setW] = useState(0); // measured on the client; nothing is drawn on the server (avoids float mismatches)
   const [drag, setDrag] = useState<number | null>(null);
@@ -70,6 +71,18 @@ export default function TimeSpine({ events, start, now, asOf, onChange, height =
     }
     return out;
   }, [tStart, tNow, xOf]);
+
+  /* context markers are many; keep at most one per ~5px, preferring policy over geo over macro and India over world */
+  const thin = useMemo(() => {
+    const rank = (m: CtxMarker) => (m.kind === "policy" ? 0 : m.kind === "geo" ? 2 : 4) + (m.scope === "india" ? 0 : 1);
+    const pts = markers.map((m) => ({ m, x: xOf(Date.parse(m.day)), extra: 0 })).sort((p, q) => rank(p.m) - rank(q.m));
+    const kept: { m: CtxMarker; x: number; extra: number }[] = [];
+    for (const p of pts) {
+      const near = kept.find((k) => Math.abs(k.x - p.x) < 5);
+      if (near) near.extra += 1; else kept.push(p);
+    }
+    return kept;
+  }, [markers, xOf]);
 
   const onDown = (e: React.PointerEvent) => {
     if (!onChange) return;
@@ -157,6 +170,21 @@ export default function TimeSpine({ events, start, now, asOf, onChange, height =
               style={{ cursor: "pointer" }}>
               <rect x={x - 5} y={mid - 14} width={10} height={28} fill="transparent" />
               {node}
+            </g>
+          );
+        })}
+        {/* policy / geo / macro context: small ticks above the line, never an input to anything */}
+        {thin.map(({ m, x, extra }, i) => {
+          const c = m.kind === "policy" ? "#d4af37" : m.kind === "geo" ? "#e0869a" : "#7fb8c4";
+          return (
+            <g key={`m${i}`}
+              onMouseEnter={(e) => show(e, <div><b>{m.label}</b><div className="k">{dmy(m.day)} · {m.scope === "india" ? "India" : "World"}{extra > 0 ? ` · +${extra} more nearby` : ""}</div><div style={{ maxWidth: 280 }}>{m.text.length > 180 ? `${m.text.slice(0, 180)}…` : m.text}</div><div className="k">{m.source_name} · Wikipedia CC BY-SA</div></div>)}
+              onMouseMove={move} onMouseLeave={hide}
+              onClick={(e) => { e.stopPropagation(); onChange?.(iso(Date.parse(m.day) + DAY)); }}
+              style={{ cursor: "pointer" }}>
+              <rect x={x - 3} y={mid - 18} width={6} height={14} fill="transparent" />
+              <line x1={x} x2={x} y1={mid - 15} y2={mid - 6} stroke={c} strokeWidth={1} opacity={0.75} />
+              <circle cx={x} cy={mid - 15} r={1.6} fill={c} opacity={0.9} />
             </g>
           );
         })}

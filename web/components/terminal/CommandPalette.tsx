@@ -16,7 +16,7 @@ const TIME_PRESETS: [string, string][] = [
 export default function CommandPalette() {
   const open = useT((s) => s.paletteOpen);
   const setOpen = useT((s) => s.setPalette);
-  const { code, setCode, setAsOf, say, history, pushHistory, setMode } = useT();
+  const { code, setCode, setAsOf, say, history, pushHistory, setMode, setShock } = useT();
   const [v, setV] = useState("");
   const [deb, setDeb] = useState("");
   useEffect(() => { const t = setTimeout(() => setDeb(v), 140); return () => clearTimeout(t); }, [v]);
@@ -34,6 +34,7 @@ export default function CommandPalette() {
     else if (q.kind === "fn") workspace.open(q.fn);
     else if (q.kind === "entity") { setCode(pickedCode ?? q.code); workspace.open(q.fn); }
     else if (q.kind === "mode") { setMode(q.mode); say(q.mode === "pro" ? "PRO mode: flat, dense, keyboard-first" : "CINEMA mode: the 3D experience", "info"); }
+    else if (q.kind === "shock") { setShock(q.text); workspace.open("TX"); }
     else if (q.kind === "help") workspace.open("HELP");
     else if (q.kind === "later") say(`${q.word} arrives with ${q.milestone}`, "warn");
     else if (q.kind === "bad") { say(q.why, "warn"); return; }
@@ -60,6 +61,7 @@ export default function CommandPalette() {
             {p.kind === "later" && <span className="warn">{p.word} arrives with {p.milestone}</span>}
             {p.kind === "bad" && <span className="warn">{p.why}</span>}
             {p.kind === "help" && <>Function codes, grammar and keys</>}
+            {p.kind === "shock" && <>Run the shock <b>{p.text.toUpperCase()}</b> through the Transmission Engine</>}
             {p.kind === "mode" && <>Switch to <b>{p.mode === "pro" ? "PRO" : "CINEMA"}</b> mode</>}
             {p.kind === "empty" && <span className="t-dim">Type a company, a function code, or ASOF &lt;date&gt;</span>}
           </div>

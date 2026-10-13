@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef } from "react";
 import { DockviewReact, type DockviewApi, type DockviewReadyEvent, type IDockviewHeaderActionsProps, type IDockviewPanelProps } from "dockview-react";
 import "dockview-react/dist/styles/dockview.css";
-import { useCompany, useLive, useMeta, useTimeline } from "@/lib/api";
+import { useCompany, useContextMarkers, useLive, useMeta, useTimeline } from "@/lib/api";
 import { FUNCTIONS } from "@/lib/commands";
 import { dmy, dmyTime, todayIST } from "@/lib/format";
 import { storedMode, useT, workspace, type FnCode, type Mode } from "@/lib/store";
@@ -18,13 +18,15 @@ import { CR, DUP, FA } from "./PanelsB";
 import { DCF, OWN, RV, WC } from "./PanelsC";
 import { MACRO } from "./PanelsD";
 import { MAP } from "./PanelsE";
+import { GEO, TX } from "./PanelsF";
 import "./terminal.css";
 import "./map.css";
 import "./pro.css";
+import "./tx.css";
 
 type P = { pin?: string };
 const wrap = (C: React.ComponentType<{ params: P }>) => function Panel(props: IDockviewPanelProps<P>) { return <C params={props.params ?? {}} />; };
-const COMPONENTS = { DES: wrap(DES), GP: wrap(GP), FA: wrap(FA), DUP: wrap(DUP), CR: wrap(CR), RV: wrap(RV), WC: wrap(WC), OWN: wrap(OWN), DCF: wrap(DCF), EVT: wrap(EVT), MACRO: wrap(MACRO), MAP: wrap(MAP), HELP: wrap(HELP) };
+const COMPONENTS = { DES: wrap(DES), GP: wrap(GP), FA: wrap(FA), DUP: wrap(DUP), CR: wrap(CR), RV: wrap(RV), WC: wrap(WC), OWN: wrap(OWN), DCF: wrap(DCF), EVT: wrap(EVT), MACRO: wrap(MACRO), MAP: wrap(MAP), TX: wrap(TX), GEO: wrap(GEO), HELP: wrap(HELP) };
 const title = (fn: FnCode, pin?: string) => `${fn}  ·  ${FUNCTIONS[fn].label}${pin ? `  ·  ⌖ ${dmy(pin)}` : ""}`;
 const THEME = { name: "trikal", className: "dockview-theme-trikal", gap: 6 };
 
@@ -66,6 +68,8 @@ function proLayout(api: DockviewApi) {
   add("EVT", "FA", "within");
   add("WC", "MACRO", "within");
   add("OWN", "MACRO", "within");
+  add("TX", "MACRO", "within");
+  add("GEO", "MACRO", "within");
   for (const id of ["RV", "FA", "MACRO"] as const) api.getPanel(id)?.api.setActive();
   const size = () => {
     try {
@@ -97,6 +101,8 @@ function defaultLayout(api: DockviewApi, mode: Mode = "cinema") {
   api.addPanel({ id: "WC", component: "WC", title: title("WC"), params: {}, position: { referencePanel: "RV", direction: "within" } });
   api.addPanel({ id: "OWN", component: "OWN", title: title("OWN"), params: {}, position: { referencePanel: "RV", direction: "within" } });
   api.addPanel({ id: "MACRO", component: "MACRO", title: title("MACRO"), params: {}, position: { referencePanel: "RV", direction: "within" } });
+  api.addPanel({ id: "TX", component: "TX", title: title("TX"), params: {}, position: { referencePanel: "RV", direction: "within" } });
+  api.addPanel({ id: "GEO", component: "GEO", title: title("GEO"), params: {}, position: { referencePanel: "RV", direction: "within" } });
   api.getPanel("DUP")?.api.setActive();
   api.getPanel("FA")?.api.setActive();
   api.getPanel("RV")?.api.setActive();
@@ -119,7 +125,7 @@ function defaultLayout(api: DockviewApi, mode: Mode = "cinema") {
 }
 
 /* Function-key bar (PRO): the core views one keystroke away. F5/F11/F12 stay with the browser. */
-const FKEYS: [string, FnCode][] = [["F1", "HELP"], ["F2", "DES"], ["F3", "GP"], ["F4", "FA"], ["F6", "RV"], ["F7", "MAP"], ["F8", "MACRO"], ["F9", "WC"], ["F10", "OWN"]];
+const FKEYS: [string, FnCode][] = [["F1", "HELP"], ["F2", "DES"], ["F3", "GP"], ["F4", "FA"], ["F6", "RV"], ["F7", "MAP"], ["F8", "MACRO"], ["F9", "TX"], ["F10", "OWN"]];
 const FKEY_MAP = Object.fromEntries(FKEYS) as Record<string, FnCode>;
 
 function FKeyBar() {
@@ -130,7 +136,7 @@ function FKeyBar() {
         <button key={k} onClick={() => workspace.open(fn)} title={FUNCTIONS[fn].desc}><b>{k}</b>{fn}</button>
       ))}
       <i />
-      {(["DUP", "CR", "DCF", "EVT"] as FnCode[]).map((fn) => (
+      {(["DUP", "CR", "DCF", "EVT", "WC"] as FnCode[]).map((fn) => (
         <button key={fn} className="plain" onClick={() => workspace.open(fn)} title={FUNCTIONS[fn].desc}>{fn}</button>
       ))}
       <span className="t-fk-sp" />
@@ -180,11 +186,12 @@ function Header() {
 function SpineBar() {
   const { asOf, setAsOf, code, mode } = useT();
   const tl = useTimeline(code, asOf);
+  const cm = useContextMarkers(asOf);
   const co = useCompany(code, "NOW");
   const start = co.data?.listings.reduce((m, l) => (l.valid_from < m ? l.valid_from : m), "9999") ?? "1994-11-03";
   return (
     <div className="t-spine">
-      <TimeSpine events={tl.data?.events ?? []} start={start === "9999" ? "1994-11-03" : start} now={todayIST()} asOf={asOf} onChange={setAsOf} height={mode === "pro" ? 44 : 58} futureFrac={0.08} />
+      <TimeSpine events={tl.data?.events ?? []} markers={cm.data?.markers} start={start === "9999" ? "1994-11-03" : start} now={todayIST()} asOf={asOf} onChange={setAsOf} height={mode === "pro" ? 44 : 58} futureFrac={0.08} />
     </div>
   );
 }
@@ -230,10 +237,13 @@ export default function Terminal() {
   const open = useCallback((fn: FnCode, opts?: { pin?: string }) => {
     const api = apiRef.current;
     if (!api) return;
+    if (api.hasMaximizedGroup()) api.exitMaximizedGroup();
     const ex = api.getPanel(fn);
-    if (ex) { ex.api.setActive(); return; }
     const ref = api.activePanel;
-    api.addPanel({ id: fn, component: fn, title: title(fn, opts?.pin), params: { pin: opts?.pin }, ...(ref ? { position: { referencePanel: ref.id, direction: "within" as const } } : {}) });
+    const panel = ex ?? api.addPanel({ id: fn, component: fn, title: title(fn, opts?.pin), params: { pin: opts?.pin }, ...(ref ? { position: { referencePanel: ref.id, direction: "within" as const } } : {}) });
+    panel.api.setActive();
+    // the transmission and exposure desks need room: they open full-window (Esc, or open any other function, to go back)
+    if (fn === "TX" || fn === "GEO") setTimeout(() => { try { api.maximizeGroup(panel); } catch { /* sizing only */ } }, 60);
   }, []);
 
   useEffect(() => {
@@ -259,6 +269,7 @@ export default function Terminal() {
         e.preventDefault();
         return;
       }
+      if (e.key === "Escape" && apiRef.current?.hasMaximizedGroup()) { apiRef.current.exitMaximizedGroup(); return; }
       if (FKEY_MAP[e.key] && !e.ctrlKey && !e.altKey && !e.shiftKey) { e.preventDefault(); workspace.open(FKEY_MAP[e.key]); return; }
       if (typing) return;
       if (e.key === "/") { e.preventDefault(); setPalette(true); }
