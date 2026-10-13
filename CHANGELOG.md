@@ -145,3 +145,7 @@ heuristics to review (RISKS R-31); sector operating metrics wait for M5/M6 (R-32
 - 5 tests (missing ≠ zero, vintages, MOSPI filtering, imputed rules, revisions invisible until released).
 
 **Next:** sector sensitivities (PIT regressions) → Transmission Engine (3D) + `SHOCK` → policy/event calendar → Exposure Theatre.
+
+**Interface modes (2026-10-13):** `◆ CINEMA | ▮ PRO` switch (remembered; `MODE PRO`). PRO = flat dense workstation that opens
+straight into the terminal, six-group layout, F-key bar, 2D sparkline instead of the 3D stone, and the new `MAP` heatmap panel
+(shared treemap layout with the 3D city). Home page redirects PRO users to `/terminal`. See UI_SPEC §10.

@@ -8,19 +8,23 @@ import "dockview-react/dist/styles/dockview.css";
 import { useCompany, useMeta, useTimeline } from "@/lib/api";
 import { FUNCTIONS } from "@/lib/commands";
 import { dmy, dmyTime, todayIST } from "@/lib/format";
-import { useT, workspace, type FnCode } from "@/lib/store";
+import { storedMode, useT, workspace, type FnCode, type Mode } from "@/lib/store";
 import { Wordmark } from "@/components/ui/Logo";
+import ModeSwitch from "@/components/ui/ModeSwitch";
 import TimeSpine from "@/components/ui/TimeSpine";
 import CommandPalette from "./CommandPalette";
 import { DES, EVT, GP, HELP } from "./PanelsA";
 import { CR, DUP, FA } from "./PanelsB";
 import { DCF, OWN, RV, WC } from "./PanelsC";
 import { MACRO } from "./PanelsD";
+import { MAP } from "./PanelsE";
 import "./terminal.css";
+import "./map.css";
+import "./pro.css";
 
 type P = { pin?: string };
 const wrap = (C: React.ComponentType<{ params: P }>) => function Panel(props: IDockviewPanelProps<P>) { return <C params={props.params ?? {}} />; };
-const COMPONENTS = { DES: wrap(DES), GP: wrap(GP), FA: wrap(FA), DUP: wrap(DUP), CR: wrap(CR), RV: wrap(RV), WC: wrap(WC), OWN: wrap(OWN), DCF: wrap(DCF), EVT: wrap(EVT), MACRO: wrap(MACRO), HELP: wrap(HELP) };
+const COMPONENTS = { DES: wrap(DES), GP: wrap(GP), FA: wrap(FA), DUP: wrap(DUP), CR: wrap(CR), RV: wrap(RV), WC: wrap(WC), OWN: wrap(OWN), DCF: wrap(DCF), EVT: wrap(EVT), MACRO: wrap(MACRO), MAP: wrap(MAP), HELP: wrap(HELP) };
 const title = (fn: FnCode, pin?: string) => `${fn}  ·  ${FUNCTIONS[fn].label}${pin ? `  ·  ⌖ ${dmy(pin)}` : ""}`;
 const THEME = { name: "trikal", className: "dockview-theme-trikal", gap: 6 };
 
@@ -44,7 +48,43 @@ function HeaderActions(props: IDockviewHeaderActionsProps) {
   );
 }
 
-function defaultLayout(api: DockviewApi) {
+/* PRO workstation layout: everything on one screen, no scrolling between tabs for the core views.
+   left: DES over RV · centre: GP over FA · right: MAP over MACRO. Other functions are tabs inside those groups. */
+function proLayout(api: DockviewApi) {
+  api.clear();
+  const add = (id: FnCode, ref?: string, direction?: "right" | "below" | "within") =>
+    api.addPanel({ id, component: id, title: title(id), params: {}, ...(ref ? { position: { referencePanel: ref, direction: direction! } } : {}) });
+  add("DES");
+  add("GP", "DES", "right");
+  add("MAP", "GP", "right");
+  add("FA", "GP", "below");
+  add("RV", "DES", "below");
+  add("MACRO", "MAP", "below");
+  add("DUP", "RV", "within");
+  add("CR", "RV", "within");
+  add("DCF", "FA", "within");
+  add("EVT", "FA", "within");
+  add("WC", "MACRO", "within");
+  add("OWN", "MACRO", "within");
+  for (const id of ["RV", "FA", "MACRO"] as const) api.getPanel(id)?.api.setActive();
+  const size = () => {
+    try {
+      const w = api.width, h = api.height;
+      if (!w || !h) return;
+      api.getPanel("DES")?.group.api.setSize({ width: Math.round(w * 0.22) });
+      api.getPanel("MAP")?.group.api.setSize({ width: Math.round(w * 0.34) });
+      api.getPanel("GP")?.group.api.setSize({ height: Math.round(h * 0.58) });
+      api.getPanel("DES")?.group.api.setSize({ height: Math.round(h * 0.46) });
+      api.getPanel("MAP")?.group.api.setSize({ height: Math.round(h * 0.5) });
+    } catch { /* sizing is cosmetic */ }
+  };
+  size();
+  setTimeout(size, 80);
+  setTimeout(size, 400);
+}
+
+function defaultLayout(api: DockviewApi, mode: Mode = "cinema") {
+  if (mode === "pro") return proLayout(api);
   api.clear();
   api.addPanel({ id: "DES", component: "DES", title: title("DES"), params: {} });
   api.addPanel({ id: "GP", component: "GP", title: title("GP"), params: {}, position: { referencePanel: "DES", direction: "right" } });
@@ -78,14 +118,36 @@ function defaultLayout(api: DockviewApi) {
   setTimeout(size, 400);
 }
 
+/* Function-key bar (PRO): the core views one keystroke away. F5/F11/F12 stay with the browser. */
+const FKEYS: [string, FnCode][] = [["F1", "HELP"], ["F2", "DES"], ["F3", "GP"], ["F4", "FA"], ["F6", "RV"], ["F7", "MAP"], ["F8", "MACRO"], ["F9", "WC"], ["F10", "OWN"]];
+const FKEY_MAP = Object.fromEntries(FKEYS) as Record<string, FnCode>;
+
+function FKeyBar() {
+  const { asOf, say } = useT();
+  return (
+    <div className="t-fkeys">
+      {FKEYS.map(([k, fn]) => (
+        <button key={k} onClick={() => workspace.open(fn)} title={FUNCTIONS[fn].desc}><b>{k}</b>{fn}</button>
+      ))}
+      <i />
+      {(["DUP", "CR", "DCF", "EVT"] as FnCode[]).map((fn) => (
+        <button key={fn} className="plain" onClick={() => workspace.open(fn)} title={FUNCTIONS[fn].desc}>{fn}</button>
+      ))}
+      <span className="t-fk-sp" />
+      <button className="plain" onClick={() => say("SCRN, SHOCK, PORT arrive with M5–M9", "warn")}>SCRN · SHOCK · PORT <em>soon</em></button>
+      <span className="t-fk-asof mono">{asOf === "NOW" ? "LIVE" : `AS OF ${dmy(asOf)}`}</span>
+    </div>
+  );
+}
+
 function Header() {
-  const { asOf, setAsOf, code, setPalette } = useT();
+  const { asOf, setAsOf, code, setPalette, mode } = useT();
   const meta = useMeta(asOf);
   const co = useCompany(code, asOf);
   const wm = meta.data?.watermark;
   return (
     <header className="t-head">
-      <Link href="/" className="t-brand"><Wordmark deva={false} /></Link>
+      <Link href="/?stay=1" className="t-brand">{mode === "pro" ? <span className="t-pro-brand">TRIKAL<b>PRO</b></span> : <Wordmark deva={false} />}</Link>
       <button className="t-cmd" onClick={() => setPalette(true)}>
         <span className="t-cmd-p">›</span>
         <span className="t-cmd-ph">Command · company, function or ASOF date</span>
@@ -97,6 +159,7 @@ function Header() {
         <span className="t-active-name">{co.data?.name ?? (co.isError ? "not listed at this as-of" : "…")}</span>
       </div>
       <div className="t-head-right">
+        <ModeSwitch />
         {asOf !== "NOW" ? (
           <button className="t-asof" onClick={() => setAsOf("NOW")} title="Return to NOW (Esc Esc)">AS OF {dmy(asOf)} <span>×</span></button>
         ) : (
@@ -111,13 +174,13 @@ function Header() {
 }
 
 function SpineBar() {
-  const { asOf, setAsOf, code } = useT();
+  const { asOf, setAsOf, code, mode } = useT();
   const tl = useTimeline(code, asOf);
   const co = useCompany(code, "NOW");
   const start = co.data?.listings.reduce((m, l) => (l.valid_from < m ? l.valid_from : m), "9999") ?? "1994-11-03";
   return (
     <div className="t-spine">
-      <TimeSpine events={tl.data?.events ?? []} start={start === "9999" ? "1994-11-03" : start} now={todayIST()} asOf={asOf} onChange={setAsOf} height={58} futureFrac={0.08} />
+      <TimeSpine events={tl.data?.events ?? []} start={start === "9999" ? "1994-11-03" : start} now={todayIST()} asOf={asOf} onChange={setAsOf} height={mode === "pro" ? 44 : 58} futureFrac={0.08} />
     </div>
   );
 }
@@ -144,8 +207,21 @@ function StatusBar() {
 export default function Terminal() {
   const apiRef = useRef<DockviewApi | null>(null);
   const sp = useSearchParams();
-  const { asOf, setAsOf, setCode, setPalette, toggle, dense, colorBlind } = useT();
+  const { asOf, setAsOf, setCode, setPalette, toggle, dense, colorBlind, mode, setMode } = useT();
   const lastEsc = useRef(0);
+  const layoutMode = useRef<Mode>("cinema");
+
+  // the saved choice (localStorage) can only be read in the browser, after hydration
+  useEffect(() => { setMode(storedMode()); }, [setMode]);
+  // switching modes re-lays the workspace out: the same panels, arranged for the mode
+  useEffect(() => {
+    const api = apiRef.current;
+    if (!api || layoutMode.current === mode) return;
+    layoutMode.current = mode;
+    defaultLayout(api, mode);
+    const f = sp.get("fn") as FnCode | null;
+    if (f && f in FUNCTIONS) setTimeout(() => open(f), 120);
+  }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const open = useCallback((fn: FnCode, opts?: { pin?: string }) => {
     const api = apiRef.current;
@@ -179,6 +255,7 @@ export default function Terminal() {
         e.preventDefault();
         return;
       }
+      if (FKEY_MAP[e.key] && !e.ctrlKey && !e.altKey && !e.shiftKey) { e.preventDefault(); workspace.open(FKEY_MAP[e.key]); return; }
       if (typing) return;
       if (e.key === "/") { e.preventDefault(); setPalette(true); }
       else if (e.key === "Escape") {
@@ -198,18 +275,20 @@ export default function Terminal() {
 
   const onReady = (e: DockviewReadyEvent) => {
     apiRef.current = e.api;
-    defaultLayout(e.api);
+    layoutMode.current = useT.getState().mode;
+    defaultLayout(e.api, layoutMode.current);
     const f = sp.get("fn") as FnCode | null;
     if (f && f in FUNCTIONS) open(f);
   };
 
   return (
-    <div className={`term ${dense ? "dense" : ""} ${asOf !== "NOW" ? "rewound" : ""}`} data-cb={colorBlind ? "1" : "0"}>
+    <div className={`term ${mode === "pro" ? "pro" : ""} ${dense ? "dense" : ""} ${asOf !== "NOW" ? "rewound" : ""}`} data-cb={colorBlind ? "1" : "0"}>
       <Header />
       <div className="t-work">
         <DockviewReact components={COMPONENTS} onReady={onReady} theme={THEME} rightHeaderActionsComponent={HeaderActions} />
       </div>
       <SpineBar />
+      {mode === "pro" && <FKeyBar />}
       <StatusBar />
       <CommandPalette />
     </div>

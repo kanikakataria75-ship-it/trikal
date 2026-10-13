@@ -2,11 +2,16 @@
 
 import { create } from "zustand";
 
-export type FnCode = "DES" | "GP" | "FA" | "DUP" | "CR" | "RV" | "WC" | "OWN" | "DCF" | "EVT" | "MACRO" | "HELP";
+export type FnCode = "DES" | "GP" | "FA" | "DUP" | "CR" | "RV" | "WC" | "OWN" | "DCF" | "EVT" | "MACRO" | "MAP" | "HELP";
+
+/* cinema = the premium 3D experience; pro = dense, flat, keyboard-first workstation (same data, same rules). */
+export type Mode = "cinema" | "pro";
+export const MODE_KEY = "trikal.mode";
 
 type State = {
   asOf: string;                 // "NOW" or YYYY-MM-DD — the global as-of every "follow" panel uses
   code: string;                 // link group A: the active security
+  mode: Mode;
   lineage: boolean;
   dense: boolean;
   colorBlind: boolean;
@@ -14,6 +19,7 @@ type State = {
   history: string[];
   toast: { text: string; tone: "info" | "warn" | "lock" } | null;
   setAsOf: (a: string) => void;
+  setMode: (m: Mode) => void;
   setCode: (c: string) => void;
   toggle: (k: "lineage" | "dense" | "colorBlind") => void;
   setPalette: (o: boolean) => void;
@@ -28,6 +34,7 @@ const load = (k: string, d: string[]) => {
 export const useT = create<State>((set, get) => ({
   asOf: "NOW",
   code: "TCS",
+  mode: "cinema",
   lineage: false,
   dense: false,
   colorBlind: false,
@@ -35,6 +42,10 @@ export const useT = create<State>((set, get) => ({
   history: typeof window !== "undefined" ? load("trikal.history", []) : [],
   toast: null,
   setAsOf: (a) => set({ asOf: a }),
+  setMode: (m) => {
+    try { localStorage.setItem(MODE_KEY, m); } catch { /* private mode */ }
+    set({ mode: m });
+  },
   setCode: (c) => set({ code: c.toUpperCase() }),
   toggle: (k) => set({ [k]: !get()[k] } as Partial<State>),
   setPalette: (o) => set({ paletteOpen: o }),
@@ -54,3 +65,7 @@ export const workspace: { open: (fn: FnCode, opts?: { pin?: string }) => void; r
   open: () => {},
   reset: () => {},
 };
+
+export function storedMode(): Mode {
+  try { return localStorage.getItem(MODE_KEY) === "pro" ? "pro" : "cinema"; } catch { return "cinema"; }
+}

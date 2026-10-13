@@ -12,6 +12,7 @@ export const FUNCTIONS: Record<FnCode, { label: string; desc: string }> = {
   OWN: { label: "Ownership", desc: "Promoter, institutions, public; pledge" },
   DCF: { label: "Valuation Lab", desc: "Methods the sector allows; assumptions labelled; ranges, never targets" },
   EVT: { label: "Events", desc: "Corporate actions, results, index changes — each with its public time" },
+  MAP: { label: "Market map", desc: "That day's index members as a heatmap: sector → stock, area = turnover, colour = move" },
   MACRO: { label: "Macro desk", desc: "FX, rates, inflation, commodities — every value as known at the as-of" },
   HELP: { label: "Help", desc: "Function codes and keys" },
 };
@@ -26,6 +27,7 @@ export type Parsed =
   | { kind: "fn"; fn: FnCode }
   | { kind: "entity"; code: string; fn: FnCode }
   | { kind: "later"; word: string; milestone: string }
+  | { kind: "mode"; mode: "cinema" | "pro" }
   | { kind: "help" }
   | { kind: "empty" }
   | { kind: "bad"; why: string };
@@ -57,6 +59,10 @@ export function parse(input: string, today: string): Parsed {
     if (!t[1]) return { kind: "bad", why: "ASOF needs a date: ASOF 2020-03-14 · ASOF -5Y · ASOF NOW" };
     const v = resolveAsOf(t[1], today);
     return v ? { kind: "asof", value: v } : { kind: "bad", why: `“${t[1]}” is not a past date (YYYY-MM-DD, -5Y, -6M, NOW). The future holds scenarios, not data.` };
+  }
+  if (t[0] === "MODE") {
+    const m = (t[1] ?? "").startsWith("PRO") ? "pro" : (t[1] ?? "").startsWith("CIN") ? "cinema" : null;
+    return m ? { kind: "mode", mode: m } : { kind: "bad", why: "MODE PRO (dense workstation) · MODE CINEMA (3D experience)" };
   }
   if (t[0] in LATER) return { kind: "later", word: t[0], milestone: LATER[t[0]] };
   if (t.length === 1 && t[0] in FUNCTIONS) return { kind: "fn", fn: t[0] as FnCode };

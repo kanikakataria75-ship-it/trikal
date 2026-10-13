@@ -17,6 +17,24 @@ const Touchstone = dynamic(() => import("@/components/three/Touchstone"), { ssr:
 
 export type PanelProps = { params: { pin?: string } };
 
+/* 2D twin of the touchstone (PRO mode): the same adjusted-close history as a plain log-scale line. */
+function Spark({ t, c }: { t: string[]; c: number[] }) {
+  const W = 300, H = 120, pad = 6;
+  const lg = c.map((v) => Math.log(Math.max(v, 1e-6)));
+  const lo = Math.min(...lg), hi = Math.max(...lg);
+  const X = (i: number) => pad + (i / Math.max(1, c.length - 1)) * (W - 2 * pad);
+  const Y = (v: number) => H - pad - ((v - lo) / Math.max(1e-9, hi - lo)) * (H - 2 * pad - 10);
+  const d = lg.map((v, i) => (i ? "L" : "M") + X(i).toFixed(1) + "," + Y(v).toFixed(1)).join("");
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="100%" preserveAspectRatio="none" className="spark">
+      <path d={d} fill="none" stroke="var(--gold-1)" strokeWidth={1.2} vectorEffect="non-scaling-stroke" />
+      <circle cx={X(c.length - 1)} cy={Y(lg[lg.length - 1])} r={2.5} fill="var(--gold-0)" />
+      <text x={pad} y={10} fontSize={8} fill="#6B7079">{t[0].slice(0, 4)}</text>
+      <text x={W - pad} y={10} fontSize={8} fill="#6B7079" textAnchor="end">{t[t.length - 1].slice(0, 4)}</text>
+    </svg>
+  );
+}
+
 /* ------------------------------------------------------------------ DES */
 export function DES({ params }: PanelProps) {
   const code = useT((s) => s.code);
@@ -24,6 +42,7 @@ export function DES({ params }: PanelProps) {
   const q = useCompany(code, asOf);
   const px = usePrices(code, asOf);
   const [tip, setTip] = useState<TipReadout | null>(null);
+  const mode = useT((s) => s.mode);
   const streak: Streak | null = useMemo(() => {
     const b = px.data?.bars;
     if (!b || b.t.length < 40 || !q.data) return null;
@@ -64,14 +83,14 @@ export function DES({ params }: PanelProps) {
                   </div>
                   <div className="des-listed">listed since <b className="mono">{dmy(firstListing)}</b> · id <span className="mono">{d.security_id}</span></div>
                 </div>
-                <div className="des-stone">
-                  {streak && <Touchstone variant="panel" streaks={[streak]} onTip={setTip} />}
+                <div className={"des-stone" + (mode === "pro" ? " flat" : "")}>
+                  {mode === "pro" ? (streak && <Spark t={streak.t} c={streak.c} />) : streak && <Touchstone variant="panel" streaks={[streak]} onTip={setTip} />}
                   {tip && (
                     <div className="des-stone-read mono">
                       <span>{dmy(tip.date)}</span><b>₹{tip.price.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</b>
                     </div>
                   )}
-                  <div className="des-stone-cap">adjusted close since listing, assayed on the touchstone</div>
+                  <div className="des-stone-cap">{mode === "pro" ? "adjusted close since listing (log scale)" : "adjusted close since listing, assayed on the touchstone"}</div>
                 </div>
               </div>
 
@@ -312,6 +331,8 @@ export function HELP() {
       <h3>Keys</h3>
       <div className="help-cmds mono">
         <span>/ · Ctrl K</span><i>command bar</i>
+        <span>MODE PRO · MODE CINEMA</span><i>flat dense workstation / 3D experience</i>
+        <span>F1–F4 · F6–F10</span><i>PRO: help, DES, GP, FA, RV, MAP, MACRO, WC, OWN</i>
         <span>[ · ]</span><i>previous / next event on the Time Spine</i>
         <span>Esc Esc</span><i>return to NOW</i>
         <span>L</span><i>lineage mode — source chips on every value</i>

@@ -9,6 +9,8 @@ import { useMarket, useSearch, useShowcase, useTimeline, type MetricResult, type
 import { dmy, dmyTime, indianGroup, METRIC_LABEL, todayIST } from "@/lib/format";
 import { parse } from "@/lib/commands";
 import { Mark, Wordmark } from "@/components/ui/Logo";
+import ModeSwitch from "@/components/ui/ModeSwitch";
+import { storedMode, useT } from "@/lib/store";
 import { LockIcon, Value } from "@/components/ui/Value";
 import TimeSpine from "@/components/ui/TimeSpine";
 import type { TipReadout } from "@/components/three/Touchstone";
@@ -45,6 +47,7 @@ function Tape() {
 }
 
 function Nav() {
+  const router = useRouter();
   return (
     <nav className={s.nav}>
       <Link href="/" className={s.brand}><Wordmark /></Link>
@@ -53,6 +56,7 @@ function Nav() {
         <a href="#survivors">Survivorship</a>
         <a href="#law">Sector law</a>
         <a href="#time">Time</a>
+        <ModeSwitch onPick={(m) => m === "pro" && router.push("/terminal")} />
         <Link href="/terminal" className={s.navCta}>Terminal <kbd>/</kbd></Link>
       </div>
     </nav>
@@ -335,6 +339,14 @@ function Close({ data }: { data?: Showcase }) {
 
 export default function Home() {
   const { data, isError } = useShowcase();
+  const router = useRouter();
+  const setMode = useT((s) => s.setMode);
+  // PRO users skip the home page and land in the workstation (the logo link adds ?stay=1 to come back here)
+  useEffect(() => {
+    const m = storedMode();
+    setMode(m);
+    if (m === "pro" && !new URLSearchParams(window.location.search).has("stay")) router.replace("/terminal");
+  }, [router, setMode]);
   return (
     <main className={s.main}>
       <Nav />

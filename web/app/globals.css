@@ -133,3 +133,12 @@ button { font: inherit; color: inherit; }
 .city-tag.down span { color: #ff2e63; }
 .city-ridge { white-space: nowrap; font-size: 10px; letter-spacing: 0.18em; color: rgba(242, 210, 122, 0.7); text-shadow: 0 1px 8px #000; }
 .city-ridge.now { color: #fff3c4; font-weight: 600; padding: 2px 7px; background: rgba(6, 7, 9, 0.7); border: 1px solid rgba(242, 210, 122, 0.6); }
+
+/* ---------- mode switch (header + home) ---------- */
+.mode-switch { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 3px; overflow: hidden; background: rgba(8, 9, 12, 0.7); flex: none; }
+.mode-switch button { background: none; border: 0; color: var(--fg-2); font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.08em; padding: 5px 10px; cursor: pointer; white-space: nowrap; }
+.mode-switch button:hover { color: var(--fg-0); }
+.mode-switch button.on { color: #120e04; background: linear-gradient(180deg, #ecd28a, #c9a434); font-weight: 700; }
+.term.pro .mode-switch { border-radius: 0; }
+.term.pro .mode-switch button.on { background: var(--gold-1); }
+

@@ -74,6 +74,13 @@ export type MacroLatest = { series_id: string; period_end: string; value: number
 export type MacroSeries = { series_id: string; name: string; unit: string; freq: "D" | "M"; category: string; source: string; known_rule: string; note: string | null; n_obs: number; first_period: string; last_period: string; latest?: MacroLatest | null };
 export type MacroObs = { period_start: string; period_end: string; value: number; known_at: string; precision: "vintage" | "imputed" };
 
+export type TimeMachine = Envelope & {
+  market: MarketDay;
+  map: { session: string; tiles: import("./treemap").Tile[]; universe: "nifty500" | "all_equities"; members_total: number };
+};
+export const useTimeMachine = (asOf: string) =>
+  useQuery({ queryKey: ["tm", asOf, false], queryFn: () => api<TimeMachine>(`/api/timemachine?${q(asOf, { hindsight: false })}`), staleTime: Infinity, placeholderData: (p) => p });
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
