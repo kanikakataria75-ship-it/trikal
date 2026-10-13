@@ -98,7 +98,7 @@ def result_docs(raw: RawStore, since: dt.date) -> list[tuple[str, str, str]]:
     return sorted(((d, u, k) for u, (d, k) in out.items()), reverse=True)
 
 
-def shp_docs(raw: RawStore) -> list[tuple[str, str, str]]:
+def shp_docs(raw: RawStore, since: dt.date | None = None) -> list[tuple[str, str, str]]:
     """(period end ISO, url, 'shp') for every shareholding-pattern XBRL listed, newest first."""
     out = {}
     for _, sha in raw.latest_ok("nse.shareholding").items():
@@ -110,17 +110,19 @@ def shp_docs(raw: RawStore) -> list[tuple[str, str, str]]:
             u = (row.get("xbrl") or "").strip()
             if u.lower().startswith("http") and u.lower().endswith(".xml"):
                 try:
-                    out[u] = dt.datetime.strptime(row["date"].title(), "%d-%b-%Y").date().isoformat()
-                except (KeyError, ValueError):
+                    d = dt.datetime.strptime(row["date"].title(), "%d-%b-%Y").date()
+                except (KeyError, ValueError, AttributeError):  # a few list rows carry date = null
                     continue
+                if since is None or d >= since:
+                    out[u] = d.isoformat()
     return sorted(((d, u, "shp") for u, d in out.items()), reverse=True)
 
 
-def fetch_docs(fetcher: Fetcher, raw: RawStore, since: dt.date, kind: str) -> dict[str, int]:
+def fetch_docs(fetcher: Fetcher, raw: RawStore, since: dt.date, kind: str, shp_since: dt.date | None = None) -> dict[str, int]:
     key = {"xbrl": "nse.xbrl.results", "html": "nse.results.html", "shp": "nse.xbrl.shp"}[kind]
     ext = {"xbrl": "xml", "html": "html", "shp": "xml"}[kind]
     done = raw.done_partitions(key)
-    docs = shp_docs(raw) if kind == "shp" else result_docs(raw, since)
+    docs = shp_docs(raw, shp_since) if kind == "shp" else result_docs(raw, since)
     todo = [(d, u) for d, u, k in docs if k == kind and u not in done]
     _log(f"{kind}: {len(todo)} documents to fetch (period end >= {since})")
     stats: dict[str, int] = {}
@@ -164,6 +166,10 @@ def run_overnight(symbols_file: str, since: str = "2011-04-01") -> None:
     t0 = time.monotonic()
     _log(f"start: {len(symbols)} symbols (keep-awake requested)")
     _log(f"lists done: {fetch_lists(symbols, fetcher, raw)}")
+    # ownership detail first for the latest four quarters of every company (a terminal with no holding pattern
+    # looks empty), then the results documents, then the older shareholding history
+    recent = dt.date.today() - dt.timedelta(days=400)
+    _log(f"shp (recent) done: {fetch_docs(fetcher, raw, dt.date.fromisoformat(since), 'shp', shp_since=recent)}")
     _log(f"xbrl done: {fetch_docs(fetcher, raw, dt.date.fromisoformat(since), 'xbrl')}")
     _refresh()
     _log(f"shp done: {fetch_docs(fetcher, raw, dt.date.fromisoformat(since), 'shp')}")

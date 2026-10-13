@@ -195,6 +195,42 @@ def fetch_macro(only: str = typer.Option("", help="comma-separated series ids (d
     typer.echo(f"loaded: {macro.load(con, raw)}")
 
 
+@app.command("update-daily")
+def update_daily(refresh: bool = typer.Option(True, help="then parse everything downloaded so far (refresh-m2)")) -> None:
+    """Bring prices up to the last published session, then (optionally) parse the fundamentals downloaded so far.
+
+    Fetches only days the exchange has had time to publish (today only after 19:30 IST), because a day answered
+    'not found' is treated as a holiday and never asked again. Stop the API first: this writes the database."""
+    from trikal_core.db import connect, init_schema
+    from trikal_core.timeutil import IST
+    from trikal_pipeline import calendar, security_master
+    from trikal_pipeline.load_prices import load_exchange
+    from trikal_pipeline.sources import bhav
+
+    now = dt.datetime.now(IST)
+    last = now.date() if now.time() >= dt.time(19, 30) else now.date() - dt.timedelta(days=1)
+    raw, fetcher = RawStore(), Fetcher()
+    for ex in ("NSE", "BSE"):
+        done = raw.done_partitions(bhav.SOURCE_KEY[ex])
+        days = [d for d in bhav.daterange(last - dt.timedelta(days=21), last) if d.isoformat() not in done]
+        stats = {"ok": 0, "not_found": 0, "error": 0}
+        for d in days:
+            stats[bhav.fetch_day(fetcher, raw, ex, d)] += 1
+        typer.echo(f"{ex}: {len(days)} days asked up to {last}: {stats}")
+    fetcher.close()
+    con = connect()
+    init_schema(con)
+    for ex in ("NSE", "BSE"):
+        bhav.stage_all(raw, ex)
+        t0 = time.monotonic()
+        typer.echo(f"{ex} loaded: {load_exchange(con, ex)} ({time.monotonic() - t0:.0f}s)")
+    typer.echo(f"calendar: {calendar.build(con, raw)}")
+    typer.echo(f"security master: {security_master.build(con)}")
+    con.close()
+    if refresh:
+        refresh_m2()
+
+
 @app.command("show")
 def show(
     code: str,
