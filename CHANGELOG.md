@@ -216,3 +216,8 @@ No LLM budget, so the M6 gaps are filled from what the exchange already files in
   measure; move, edit, recolour, delete, undo; saved per stock in the browser. Anchored to (bar, price), so they follow pan, zoom and log/linear.
 - `TRIKAL.bat` starts the data server and the terminal and opens the browser; `STOP_TRIKAL.bat` stops both.
 - Concall parser: a sentence with two figures gives two statements, each with its own metric.
+- Concall verdicts compare like with like: constant-currency / single-business revenue guidance, unspecified "margin" and all IT-services revenue
+  guidance are listed but not judged; operating-margin statements are judged against EBIT margin, EBITDA-margin ones against EBITDA margin.
+- Command bar: KAS, CC/CONCALL, KASAUTI and SEGMENTS resolve to their panels (KAS used to answer "later milestone").
+- `docs/guide/TRIKAL_KASAUTI_Field_Guide.pdf`: the full guide (how to run, read, trust and extend; all commands; audit; roadmap). Rebuild with
+  `.venv\Scripts\python.exe docs\guide\build_guide.py`.

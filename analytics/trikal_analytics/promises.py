@@ -15,8 +15,9 @@ from trikal_core.timeutil import AsOf
 RESULTS_LAG_DAYS = 75               # full-year results are public within 60 days of the year end (LODR Reg 33)
 MIN_JUDGED_FOR_CREDIBILITY = 4
 SCORE = {"delivered": 1.0, "partially": 0.5, "missed": 0.0}
-JUDGE_WITH = {"revenue_growth": "revenue_growth", "ebitda_margin": "ebitda_margin", "profit_growth": "profit_growth"}
-LABEL = {"revenue_growth": "revenue growth", "ebitda_margin": "operating / EBITDA margin", "profit_growth": "profit growth"}
+JUDGE_WITH = {"revenue_growth": "revenue_growth", "ebitda_margin": "ebitda_margin", "ebit_margin": "ebit_margin", "profit_growth": "profit_growth"}
+NOT_COMPARABLE = {"revenue_growth_cc": "guided in constant currency or for one business, while the filings report total revenue in rupees",
+                  "margin_generic": "the statement says only 'margin': which one is not clear"}
 
 
 def verdict_for(op: str, low: float, high: float, actual: float) -> str:
@@ -37,6 +38,12 @@ def verdict_for(op: str, low: float, high: float, actual: float) -> str:
 
 def judge(engine: M.Engine, security_id: str, p: dict, as_of: AsOf) -> dict:
     out = {"verdict": "not judged", "why": None, "actual": None}
+    if p["metric"] == "revenue_growth" and engine.resolution(security_id, as_of).playbook.id == "it_services":
+        out["why"] = NOT_COMPARABLE["revenue_growth_cc"] + " (IT services guide in constant currency)"
+        return out
+    if p["metric"] in NOT_COMPARABLE:
+        out["why"] = NOT_COMPARABLE[p["metric"]]
+        return out
     if p["metric"] not in JUDGE_WITH:
         out["why"] = "this kind of statement is listed but not judged yet"
         return out
@@ -53,7 +60,8 @@ def judge(engine: M.Engine, security_id: str, p: dict, as_of: AsOf) -> dict:
         return out
     actual = v.value * 100
     out.update(verdict=verdict_for(p["op"], p["low"], p["high"], actual), actual=actual,
-               why=f"the filing for the year to {p['horizon_end']:%d %b %Y} shows {actual:.1f}%")
+               why=f"the filing for the year to {p['horizon_end']:%d %b %Y} shows {actual:.1f}%"
+               + (" (EBIT margin from the filing; the company's own definition of operating margin may differ slightly)" if p["metric"] == "ebit_margin" else ""))
     return out
 
 

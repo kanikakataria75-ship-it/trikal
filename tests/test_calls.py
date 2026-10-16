@@ -24,10 +24,10 @@ def promise(s, page=3):
 
 
 def test_a_guided_range_with_a_period_becomes_a_promise():
-    p = promise("For this financial year we expect revenue growth of 8% to 10% in constant currency.")
+    p = promise("For this financial year we expect revenue growth of 8% to 10%.")
     assert (p.metric, p.op, p.low, p.high, p.horizon_end, p.horizon_kind) == ("revenue_growth", "range", 8.0, 10.0, FY26, "fy")
     p = promise("Our operating margin guidance for FY27 is at least 22%.")
-    assert (p.metric, p.op, p.low, p.horizon_end) == ("ebitda_margin", "at_least", 22.0, D(2027, 3, 31))
+    assert (p.metric, p.op, p.low, p.horizon_end) == ("ebit_margin", "at_least", 22.0, D(2027, 3, 31))
     p = promise("We are aiming for double-digit revenue growth next year.")
     assert p.op == "at_least" and p.low == 10.0 and p.horizon_end == D(2027, 3, 31)
 
@@ -75,7 +75,7 @@ def test_verdict_rules():
 
 
 def seeded(con):
-    sid = seed_company(con, sid="S:INE000C01", code="CALLCO")
+    sid = seed_company(con, sid="S:INE000C01", code="CALLCO", sector="Fast Moving Consumer Goods")
     # four quarters of FY25 and four of FY26: revenue 1000 a quarter then 1100: 10% growth; EBITDA margin constant
     fy25, fy26 = [D(2024, 6, 30), D(2024, 9, 30), D(2024, 12, 31), D(2025, 3, 31)], [D(2025, 6, 30), D(2025, 9, 30), D(2025, 12, 31), D(2026, 3, 31)]
     from conftest import add_fact_row
@@ -134,5 +134,18 @@ def test_endpoint_serves_statements_judged_at_the_as_of_date(con, monkeypatch):
 def test_one_sentence_with_two_figures_gives_two_promises_each_with_its_own_metric():
     ps = CP.read_promises("Our FY27 growth guidance is now 2.5% to 4%, and our EBIT margin guidance remains at 17.5% to 18.5%.", 3, CP.fy_end_of(CALL_Q))
     got = {p.metric: (p.low, p.high) for p in ps}
-    assert got == {"revenue_growth": (2.5, 4.0), "ebitda_margin": (17.5, 18.5)}
+    assert got == {"revenue_growth": (2.5, 4.0), "ebit_margin": (17.5, 18.5)}
     assert CP.read_promises("Revenue growth and margin guidance is 17% to 18% for FY27.", 3, CP.fy_end_of(CALL_Q)) == []     # two metrics, one figure: ambiguous
+
+
+def test_constant_currency_and_unspecified_margins_are_listed_but_never_judged(con):
+    cc = promise("We expect revenue growth of 8% to 10% in constant currency this year.")
+    assert cc.metric == "revenue_growth_cc"
+    assert promise("We expect EBITDA margin of 24% to 26% this year.").metric == "ebitda_margin"
+    assert promise("We expect margins of around 20% this year.").metric == "margin_generic"
+    sid = seeded(con)
+    eng = M.Engine(PitReader(con))
+    base = {"op": "range", "low": 8.0, "high": 10.0, "horizon_end": FY26, "horizon_kind": "fy"}
+    for m in ("revenue_growth_cc", "margin_generic"):
+        j = PR.judge(eng, sid, {**base, "metric": m}, AsOf.end_of(D(2026, 8, 1)))
+        assert j["verdict"] == "not judged" and j["why"]

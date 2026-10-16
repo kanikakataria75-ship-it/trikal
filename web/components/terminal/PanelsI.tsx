@@ -17,7 +17,7 @@ import type { PanelProps } from "./PanelsA";
 
 echarts.use([LineChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer]);
 
-const METRIC: Record<string, string> = { revenue_growth: "Revenue growth", ebitda_margin: "Operating margin", profit_growth: "Profit growth", capex: "Capex / investment",
+const METRIC: Record<string, string> = { revenue_growth: "Revenue growth", ebitda_margin: "EBITDA margin", ebit_margin: "EBIT / operating margin", margin_generic: "Margin (unspecified)", revenue_growth_cc: "Revenue growth (constant currency / business)", profit_growth: "Profit growth", capex: "Capex / investment",
   volume_growth: "Volume", return_ratio: "Return ratio", debt: "Debt" };
 const VERDICT: Record<string, string> = { delivered: "kept", partially: "partly", missed: "missed", pending: "pending", "not judged": "not judged", "no data": "no data" };
 const cls = (v: string) => (v === "delivered" ? "pos" : v === "missed" ? "neg" : v === "partially" ? "warn" : "t-dim");

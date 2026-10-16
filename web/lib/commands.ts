@@ -23,8 +23,8 @@ export const FUNCTIONS: Record<FnCode, { label: string; desc: string }> = {
 };
 
 export const LATER: Record<string, string> = {
-  SEC: "M4/M5 sector desk", POL: "M5", 
-  CC: "M6 concalls", KAS: "M7 KASAUTI", NOTE: "M8", RPT: "M8", FRX: "M9 forensics", CAL: "M9", SCRN: "M9 screener",
+  SEC: "M4/M5 sector desk", POL: "M5",
+  NOTE: "M8", RPT: "M8", FRX: "M9 forensics", CAL: "M9", SCRN: "M9 screener",
 };
 
 export type Parsed =
@@ -58,7 +58,7 @@ export function resolveAsOf(v: string, today: string): string | null {
 }
 
 export function parse(input: string, today: string): Parsed {
-  const t = input.trim().toUpperCase().split(/\s+/).filter(Boolean);
+  const t = input.trim().toUpperCase().split(/\s+/).filter(Boolean).map((w, i) => (w === "CC" || w === "CONCALL" ? "CALL" : w === "KASAUTI" ? "KAS" : w === "SEGMENTS" ? "SEG" : w));
   if (!t.length) return { kind: "empty" };
   if (t[0] === "?" || t[0] === "HELP") return { kind: "help" };
   if (t[0] === "ASOF") {

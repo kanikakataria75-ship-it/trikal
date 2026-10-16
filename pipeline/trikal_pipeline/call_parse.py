@@ -28,14 +28,16 @@ QUESTION = re.compile(r"\?\s*$|\b(?:can you|could you|would you|do you|are you|w
 
 METRICS = {
     "revenue_growth": re.compile(r"\b(revenue|sales|top[\s-]?line|turnover)\b(?:[^.]{0,40}\b(growth|grow|growing|increase))?", re.I),
-    "ebitda_margin": re.compile(r"\b(ebitda|operating|ebit|oi)\s+margins?\b|\bmargins?\b", re.I),
+    "ebitda_margin": re.compile(r"\bebitda\s+margins?\b", re.I),
+    "ebit_margin": re.compile(r"\b(?:ebit|operating|opm|oi)\s+margins?\b|operating profit margin", re.I),
+    "margin_generic": re.compile(r"\bmargins?\b", re.I),
     "profit_growth": re.compile(r"\b(pat|profit after tax|net profit|bottom[\s-]?line|earnings|eps)\b", re.I),
     "capex": re.compile(r"\bcap(?:ital )?ex(?:penditure)?\b|\binvest(?:ment)?s?\b", re.I),
     "volume_growth": re.compile(r"\bvolumes?\b", re.I),
     "return_ratio": re.compile(r"\b(roce|roe|return on)\b", re.I),
     "debt": re.compile(r"\b(net debt|debt|leverage)\b", re.I),
 }
-JUDGEABLE = {"revenue_growth": "revenue_growth", "ebitda_margin": "ebitda_margin", "profit_growth": "profit_growth"}
+CONSTANT_CURRENCY = re.compile(r"constant[\s-]currency|\bcc\b|cc terms|in dollar terms|usd terms|\bservices (?:business|revenue|segment)", re.I)
 GROWTH_WORD = re.compile(r"\b(growth|grow|growing|increase|expand|cagr|y-?o-?y)\b", re.I)
 RANGE = re.compile(r"(\d+(?:\.\d+)?)\s*(?:%|per\s?cent)?\s*(?:-|–|—|to)\s*(\d+(?:\.\d+)?)\s*(?:%|per\s?cent)", re.I)
 PCT = re.compile(r"(\d+(?:\.\d+)?)\s*(?:%|per\s?cent)", re.I)
@@ -144,6 +146,8 @@ def _metrics_in(text: str) -> list[str]:
             if name in ("revenue_growth", "profit_growth") and not GROWTH_WORD.search(text) and not DOUBLE_DIGIT.search(text):
                 continue
             found.append(name)
+    if len(found) > 1 and "margin_generic" in found and any(m in found for m in ("ebitda_margin", "ebit_margin")):
+        found.remove("margin_generic")
     return found
 
 
@@ -169,6 +173,8 @@ def read_promises(sentence: str, page: int, call_fy: dt.date) -> list[Promise]:
         if len(ms) != 1:
             continue                                                     # none, or two metrics sharing one number: ambiguous, left out
         metric = ms[0]
+        if metric == "revenue_growth" and CONSTANT_CURRENCY.search(sentence):
+            metric = "revenue_growth_cc"                                  # guided in constant currency / for a business: not comparable to reported rupees
         m = RANGE.search(clause)
         if m:
             lo, hi = sorted((float(m.group(1)), float(m.group(2))))
