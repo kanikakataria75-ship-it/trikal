@@ -497,8 +497,25 @@ def cashriver(code: str, as_of: str = AS_OF, exchange: str = "NSE"):
         return ok({"security_id": sid, "years": out, "groups": CASH_RIVER}, a)
 
 
+_PEERS_CACHE: dict[tuple, tuple[float, dict]] = {}
+
+
 @app.get("/api/company/{code}/peers")
 def peers(code: str, as_of: str = AS_OF, exchange: str = "NSE", limit: int = 24):
+    """Peers cost a few seconds (every peer's metrics are computed): the answer is kept for a pinned as-of (it can never change)
+    and for ten minutes for NOW."""
+    key = (code.upper(), as_of.upper() if as_of.upper() == "NOW" else as_of, exchange, limit)
+    hit = _PEERS_CACHE.get(key)
+    if hit and (key[1] != "NOW" or time.time() - hit[0] < 600):
+        return hit[1]
+    out = _peers(code, as_of, exchange, limit)
+    if len(_PEERS_CACHE) >= 128:
+        _PEERS_CACHE.pop(next(iter(_PEERS_CACHE)))
+    _PEERS_CACHE[key] = (time.time(), out)
+    return out
+
+
+def _peers(code: str, as_of: str, exchange: str, limit: int):
     a = asof(as_of)
     cols = ["market_cap", "pe", "pb", "roe", "ebitda_margin", "revenue_growth"]
     with DB.reader_ctx() as r:
