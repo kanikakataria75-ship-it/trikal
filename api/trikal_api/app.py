@@ -511,6 +511,26 @@ def kasauti_score(code: str, as_of: str = AS_OF, exchange: str = "NSE"):
                    "note": "a research ranking among sector peers, not a rating, target price or advice"}, a)
 
 
+@app.get("/api/company/{code}/concalls")
+def concalls(code: str, as_of: str = AS_OF, exchange: str = "NSE"):
+    """Earnings-call statements with a number, judged against the company's own later results as of `as_of`, plus word-list tone drift.
+    Rule-based extraction (no model): each statement shows its sentence, call and page."""
+    from trikal_analytics import promises as PR
+
+    a = asof(as_of)
+    with DB.reader_ctx() as r:
+        sid = _sid(r, code, a, exchange)
+        eng = M.Engine(r)
+        calls = r.concalls(sid, a)
+        proms = PR.dedupe(r.concall_promises(sid, a))
+        judged = [{**p, **PR.judge(eng, sid, p, a)} for p in proms]
+        return ok({"security_id": sid, "calls": len(calls), "promises": judged, "credibility": PR.credibility(judged),
+                   "tone": PR.tone_series(calls),
+                   "examples": (calls[-1]["examples"] if calls else None),
+                   "note": "statements are read by rules from the transcripts the company filed with the exchange; a verdict uses only results public at "
+                           "the as-of date; tone is a word-list count, not a model's reading"}, a)
+
+
 @app.get("/api/company/{code}/dupont")
 def dupont(code: str, as_of: str = AS_OF, exchange: str = "NSE"):
     a = asof(as_of)

@@ -206,6 +206,17 @@ CREATE TABLE IF NOT EXISTS deck_parsed (
     detail VARCHAR, parsed_at TIMESTAMPTZ
 );
 
+-- Earnings-call transcripts the company filed with the exchange, read by rules (call_parse.py): one row per call, with the word-list
+-- tone and a few quotes, and one row per forward-looking statement with a number ("promise"). known_at = the filing broadcast time.
+CREATE TABLE IF NOT EXISTS concall (
+    source_url VARCHAR, security_id VARCHAR, symbol VARCHAR, announced_at TIMESTAMPTZ, call_period_end DATE,
+    pages INTEGER, words INTEGER, status VARCHAR, tone VARCHAR, examples VARCHAR, parsed_at TIMESTAMPTZ
+);
+CREATE TABLE IF NOT EXISTS concall_promise (
+    source_url VARCHAR, security_id VARCHAR, announced_at TIMESTAMPTZ, call_period_end DATE,
+    metric VARCHAR, op VARCHAR, low DOUBLE, high DOUBLE, horizon_end DATE, horizon_kind VARCHAR, quote VARCHAR, page INTEGER
+);
+
 -- KASAUTI scores, one row per (score version, scoring date, security). Derived data: reproducible from the PIT inputs, kept so that
 -- the report card and the live record are fixed once written. `detail` is the JSON breakdown (pillars, metrics, percentiles, drivers).
 CREATE TABLE IF NOT EXISTS kasauti_score (

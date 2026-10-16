@@ -201,3 +201,11 @@ No LLM budget, so the M6 gaps are filled from what the exchange already files in
   `slippage_ratio`, `car` from `fact_reported` when a current figure exists, else `NotAvailable` as before.
 - A shareholding taxonomy change in 2026 filings (FPI categories) produced fake 15-point "institutional outflows"; swings above 12 points a year are now n/a.
 - 195 tests.
+
+## Concalls without an LLM (2026-10-16, in progress)
+- `fetch-calls`: earnings-call transcripts the companies filed with the exchange (Nifty 500, newest 8 each), raw zone, resumable.
+- `call_parse.py`: rule-based statements with a number (forward cue + metric + percentage + year; questions, negations, the past, analysts
+  speaking to management and multi-year targets are excluded) and word-list tone (positive, negative, hedging, deflected answers).
+- `analytics/promises.py`: deterministic verdicts against the company's own later results at the as-of date (kept / partly / missed /
+  pending / not judged), management credibility (needs 4 judged statements), tone change vs the previous call and the average of four.
+- `/api/company/{code}/concalls`, terminal panel `CALL`. `build-calls` loads `concall` / `concall_promise`. 203 tests.

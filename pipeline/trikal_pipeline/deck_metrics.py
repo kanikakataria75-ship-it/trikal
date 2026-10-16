@@ -131,7 +131,7 @@ def scan_page(text: str, page: int, target: dt.date) -> list[Hit]:
             qualified = bool(re.search(spec["qualifiers"], line, re.I))
             header = _header_for(lines, i, len(nums))
             value = None
-            prose = len(re.findall(r"[A-Za-z]{2,}", re.sub(r"(?i)(?:n\.?a\.?|nm|bps|pp)", " ", rest)))
+            prose = len(re.findall(r"[A-Za-z]{2,}", re.sub(r"(?i)\b(?:n\.?a\.?|nm|bps|pp)\b", " ", rest)))
             if header is not None and len(nums) <= MAX_COLUMNS and prose <= 2:          # a row is a label and numbers, not prose
                 idx = [k for k, (_, d, kind) in enumerate(header) if d == target and kind == "q"]
                 if len(idx) == 1:

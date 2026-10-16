@@ -963,3 +963,32 @@ def _reported(self: PitReader, security_id: str, as_of: AsOf, concept: str) -> d
 
 
 PitReader.reported = _reported  # type: ignore[attr-defined]
+
+
+def _concalls(self: PitReader, security_id: str, as_of: AsOf, limit: int = 24) -> list[dict]:
+    """Calls whose transcript was public at as_of, oldest first (the last `limit`), each with its tone and quotes."""
+    try:
+        rows = self.con.execute(
+            """SELECT source_url, announced_at, call_period_end, pages, words, status, tone, examples FROM concall
+               WHERE security_id = ? AND announced_at <= ? AND status = 'ok' ORDER BY announced_at DESC LIMIT ?""",
+            [security_id, as_of.ts, limit]).fetchall()
+    except Exception:
+        return []
+    return [{"source_url": u, "announced_at": a, "call_period_end": p, "pages": pg, "words": w, "status": st,
+             "tone": json.loads(t) if t else None, "examples": json.loads(e) if e else None} for u, a, p, pg, w, st, t, e in reversed(rows)]
+
+
+def _concall_promises(self: PitReader, security_id: str, as_of: AsOf) -> list[dict]:
+    try:
+        rows = self.con.execute(
+            """SELECT source_url, announced_at, call_period_end, metric, op, low, high, horizon_end, horizon_kind, quote, page
+               FROM concall_promise WHERE security_id = ? AND announced_at <= ? ORDER BY announced_at DESC, page""",
+            [security_id, as_of.ts]).fetchall()
+    except Exception:
+        return []
+    keys = ("source_url", "announced_at", "call_period_end", "metric", "op", "low", "high", "horizon_end", "horizon_kind", "quote", "page")
+    return [dict(zip(keys, r)) for r in rows]
+
+
+PitReader.concalls = _concalls  # type: ignore[attr-defined]
+PitReader.concall_promises = _concall_promises  # type: ignore[attr-defined]

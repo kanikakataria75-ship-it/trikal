@@ -111,3 +111,13 @@
 .kas-warn { font-size: 11px; color: var(--warn); margin: 4px 0 6px; line-height: 1.5; }
 .kas-rc { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: center; margin-top: 6px; }
 .kas-dec { height: 170px; }
+
+/* CALL — concalls */
+.call { display: flex; flex-direction: column; gap: 8px; }
+.call-head { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+.call-score { font-size: 38px; color: var(--gold-0); font-weight: 500; }
+.call-meta { font-size: 12px; line-height: 1.55; flex: 1; min-width: 240px; color: var(--fg-1); }
+.call-tab td { vertical-align: top; font-size: 12px; }
+.call-q { color: var(--fg-1); line-height: 1.45; }
+.call-chart { height: 190px; }
+.warn { color: var(--warn); }

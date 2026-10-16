@@ -436,6 +436,37 @@ def kasauti_freeze_cmd(version: int = 1) -> None:
     typer.echo(f"frozen v{version} sha256 {cfg.sha256}")
 
 
+@app.command("fetch-calls")
+def fetch_calls_cmd(symbols: str = typer.Option("", help="comma-separated NSE symbols (default: current Nifty 500 members)"),
+                    per_symbol: int = 8) -> None:
+    """Download earnings-call transcripts the companies filed with the exchange. Raw zone only."""
+    from trikal_core.pit import PitReader
+    from trikal_core.timeutil import AsOf
+    from trikal_pipeline.sources import nse_calls as NC
+
+    raw, fetcher = RawStore(), Fetcher()
+    syms = [x.strip().upper() for x in symbols.split(",") if x.strip()]
+    if not syms:
+        con = _connect_wait()
+        syms = [m[1] for m in PitReader(con).index_members("NIFTY500", AsOf.now())]
+        con.close()
+    typer.echo(f"{len(syms)} symbols")
+    typer.echo(f"lists: {NC.fetch_lists(syms, fetcher, raw)}")
+    typer.echo(f"pdfs: {NC.fetch_pdfs(fetcher, raw, syms, per_symbol)}")
+    fetcher.close()
+
+
+@app.command("build-calls")
+def build_calls_cmd(limit: int = typer.Option(0, help="read at most this many transcripts (0 = all)")) -> None:
+    """Read downloaded transcripts into concall / concall_promise. Stop the API first."""
+    from trikal_core.db import init_schema
+    from trikal_pipeline.load_calls import build_calls
+
+    con = _connect_wait()
+    init_schema(con)
+    typer.echo(build_calls(con, RawStore(), limit=limit or None, log=typer.echo))
+
+
 @app.command("relabel-dims")
 def relabel_dims_cmd() -> None:
     """One-off after the parser started naming segment / other-expense members: re-read the filings that have them,

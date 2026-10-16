@@ -148,6 +148,15 @@ export type KasReport = Envelope & { available: boolean; reason?: string; frozen
 export const useKasauti = companyHook<Kasauti>("kasauti");
 export const useKasautiReport = (asOf: string) => useQuery({ queryKey: ["kasauti-report", asOf], queryFn: () => api<KasReport>(`/api/kasauti/report?${q(asOf)}`), staleTime: Infinity });
 
+export type CallPromise = { source_url: string; announced_at: string; call_period_end: string; metric: string; op: string; low: number; high: number;
+  horizon_end: string | null; horizon_kind: string; quote: string; page: number; verdict: string; why: string | null; actual: number | null };
+export type ToneRow = { announced_at: string; period_end: string; words: number | null; has_qa: boolean | null; net_tone: number | null; hedge_rate: number | null;
+  negative_rate: number | null; evasive_count: number | null; net_tone_vs_prev: number | null; hedge_rate_vs_prev: number | null; net_tone_vs_avg4: number | null; hedge_rate_vs_avg4: number | null };
+export type Concalls = Envelope & { security_id: string; calls: number; promises: CallPromise[]; note: string;
+  credibility: { judged: number; score: number | null; delivered: number; partially: number; missed: number; pending: number; needs: number };
+  tone: ToneRow[]; examples: { hedged?: string[]; evasive?: string[]; negative?: string[] } | null };
+export const useConcalls = companyHook<Concalls>("concalls");
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
