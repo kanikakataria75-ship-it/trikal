@@ -188,3 +188,25 @@ def test_stored_scores_are_served_point_in_time_and_labelled(con, monkeypatch, t
     r = c.get("/api/kasauti/report?as_of=2024-08-15").json()
     assert r["available"] is False and "NOW only" in r["reason"]                                            # no hindsight in a rewound view
     assert c.get("/api/kasauti/report?as_of=NOW").json()["available"] is False                              # no report generated yet
+
+
+def test_an_implausible_institutional_swing_is_a_filing_format_change_not_a_signal(con):
+    from conftest import seed_company
+    from trikal_core.db import insert_many
+    from trikal_core.pit import PitReader
+    from trikal_core.timeutil import AsOf, at_ist
+    from trikal_kasauti.factors import ownership_factors
+
+    sid = seed_company(con, sid="S:INE000H01", code="HOLDX")
+    ka = at_ist(D(2026, 7, 20), dt.time(12, 0))
+
+    def put(pe, mf, fpi, ins, prom=50.0):
+        rows = [("ShareholdingOfPromoterAndPromoterGroup", prom), ("MutualFundsOrUTI", mf), ("InstitutionsForeignPortfolioInvestorCategoryOne", fpi),
+                ("InsuranceCompanies", ins)]
+        insert_many(con, "INSERT INTO shareholding VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    [(sid, pe, c, None, None, v, ka, "exact", "", "f", "sha") for c, v in rows])
+
+    put(D(2025, 6, 30), 29.0, 46.0, 10.0)
+    put(D(2026, 6, 30), 29.6, 33.8, 8.2)                                       # FPI re-cut: apparent -15 points
+    f = ownership_factors(PitReader(con), sid, AsOf.end_of(D(2026, 8, 1)))
+    assert f["institution_change_4q"] is None and f["promoter_change_4q"] == 0.0

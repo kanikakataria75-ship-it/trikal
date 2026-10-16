@@ -10,6 +10,7 @@ from trikal_core.timeutil import AsOf
 
 FACTOR_METRICS = ("promoter_change_4q", "institution_change_4q", "pledge_pct", "momentum_12_1", "momentum_6")
 STALE_PRICE_DAYS = 10
+MAX_PLAUSIBLE_HOLDING_SWING = 12.0       # percentage points in about a year
 
 
 def ownership_factors(reader: PitReader, security_id: str, as_of: AsOf) -> dict[str, float | None]:
@@ -25,7 +26,12 @@ def ownership_factors(reader: PitReader, security_id: str, as_of: AsOf) -> dict[
                 out["promoter_change_4q"] = now["promoter"] - then["promoter"]
             legs = ("mutual_funds", "fpi", "insurance")
             if all(now[g] is not None and then[g] is not None for g in legs):
-                out["institution_change_4q"] = sum(now[g] - then[g] for g in legs)
+                d = sum(now[g] - then[g] for g in legs)
+                # A swing of this size in a year is a change of filing taxonomy (the FPI categories were re-cut in 2026 filings), not
+                # institutions buying or selling: treated as not available rather than scored.
+                out["institution_change_4q"] = d if abs(d) <= MAX_PLAUSIBLE_HOLDING_SWING else None
+            if out["promoter_change_4q"] is not None and abs(out["promoter_change_4q"]) > MAX_PLAUSIBLE_HOLDING_SWING:
+                out["promoter_change_4q"] = None
     p = reader.pledge(security_id, as_of)
     if p and p[0][3] is not None:
         out["pledge_pct"] = float(p[0][3])

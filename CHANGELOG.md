@@ -185,3 +185,19 @@ No LLM budget, so the M6 gaps are filled from what the exchange already files in
 - **Reported coverage ratios**: `dscr` / `iscr` as the company states them (`FA` group "Ratios as reported"), ~670 companies from 2019;
   definitions differ between companies, so they are shown as reported, never recomputed.
 - Peers endpoint cache (pinned as-of forever, NOW for 10 min). 171 tests.
+
+## M7: KASAUTI v1 and the M6 gaps without an LLM (2026-10-16)
+
+- **KASAUTI v1** (`kasauti/`, `config/scores/kasauti_v1.yaml`, ADR-022): peer-percentile score from six pillars (quality, growth, valuation,
+  balance sheet, ownership flow, momentum; a financials profile for banks/NBFCs/insurers). Missing data is never imputed: thin pillars are dropped
+  and listed with the pillars v1 does not have (credibility, macro fit, forensics, sector regime). Stored in `kasauti_score`; `KAS` panel shows the
+  score, pillars, what moved it, all inputs and the report card; `/api/company/{code}/kasauti`, `/api/kasauti/report` (NOW only).
+- **Report card** (`docs/reports/kasauti_v1.md`): rank IC 0.007 / 0.028 / 0.037 / 0.041 at 1/3/6/12 months (Newey-West t 0.3 / 1.3 / 2.1 / 2.1),
+  top decile +18.6% a year vs +14.1% after costs, and an IC that fades from 2023 to 2026. Labelled in-sample; v1 frozen and pinned by SHA-256.
+- **Data finding:** the exchange's 2018-2021 XBRL result files are partial, so full statements exist only to 2017 (HTML) and from 2022: scored dates start 2023.
+- **Results decks** (ADR-023): `fetch-decks` (50 banks/NBFCs, 527 presentations) and `build-reported`: header-matched table rows or sentences naming
+  the quarter, plausibility ranges, a cross-check against the XBRL, an outlier gate; every value keeps deck, page and line. 248 values from 28 companies
+  (CAR 87, PCR 63, NIM 61, CASA 23, slippage 9) out of 527 decks (324 decks matched nothing). The engine now answers `nim`, `casa_ratio`, `pcr`,
+  `slippage_ratio`, `car` from `fact_reported` when a current figure exists, else `NotAvailable` as before.
+- A shareholding taxonomy change in 2026 filings (FPI categories) produced fake 15-point "institutional outflows"; swings above 12 points a year are now n/a.
+- 195 tests.

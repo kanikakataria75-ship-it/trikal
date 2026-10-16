@@ -126,7 +126,10 @@ export function KAS({ params }: PanelProps) {
         <div className="t-k">Report card · does the ranking predict returns?</div>
         {!rep.data?.available ? <div className="t-dim">{rep.data?.reason ?? "…"}</div> : (
           <>
-            <div className="kas-warn">{rep.data.frozen ? "Frozen version: results after the freeze date are a live record." : "In-sample backtest: " }{rep.data.report!.label}</div>
+            <div className="kas-warn">
+              In-sample backtest: {rep.data.report!.label}.{" "}
+              {rep.data.frozen ? `Version ${rep.data.frozen.version} was frozen on ${dmy(rep.data.frozen.frozen_at.slice(0, 10))}: scores computed after that date form the live record (none long enough yet to judge).` : "Not frozen yet."}
+            </div>
             <Seg value={hz} onChange={setHz} options={Object.keys(horizons).map((k) => ({ v: k, l: `${k}m` }))} />
             {h && h.dates > 0 ? (
               <div className="kas-rc">
