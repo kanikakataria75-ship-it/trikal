@@ -465,6 +465,52 @@ def segments(code: str, as_of: str = AS_OF, exchange: str = "NSE", period: str =
                            "result is profit before tax and finance cost; available from about FY2019 (Ind AS XBRL)"}, a)
 
 
+KASAUTI_VERSION = 1
+
+
+@app.get("/api/kasauti/report")
+def kasauti_report(as_of: str = AS_OF):
+    """The report card of the current score version. It looks at returns up to today, so it is shown for NOW only: a rewound
+    view must not carry knowledge of what happened afterwards."""
+    from trikal_kasauti import config as KC
+
+    a = asof(as_of)
+    if as_of.upper() != "NOW":
+        return ok({"available": False, "reason": "the report card judges the score by returns after each date; it is shown for NOW only"}, a)
+    f = KC.report_file(KASAUTI_VERSION)
+    if not f.exists():
+        return ok({"available": False, "reason": "no report card yet: run trikal kasauti-backtest"}, a)
+    fz = KC.frozen()
+    return ok({"available": True, "report": json.loads(f.read_text(encoding="utf-8")),
+               "frozen": fz if fz and fz.get("version") == KASAUTI_VERSION else None}, a)
+
+
+@app.get("/api/company/{code}/kasauti")
+def kasauti_score(code: str, as_of: str = AS_OF, exchange: str = "NSE"):
+    """The company's stored KASAUTI score at the latest scoring date on or before as_of, with pillars, drivers and what was left out."""
+    from trikal_kasauti import config as KC
+
+    a = asof(as_of)
+    cfg = KC.load(KASAUTI_VERSION)
+    with DB.reader_ctx() as r:
+        sid = _sid(r, code, a, exchange)
+        s = r.kasauti_latest(KASAUTI_VERSION, sid, a)
+        if s is None:
+            return ok({"security_id": sid, "available": False, "version": KASAUTI_VERSION,
+                       "reason": "not scored: not a Nifty 500 member on any scoring date up to this as-of (scores are quarterly, from mid-2019)"}, a)
+        day = s["as_of"]
+        late = (s["computed_at"].date() - day).days > 7 if s["computed_at"] else True
+        fz = KC.frozen()
+        return ok({"security_id": sid, "available": True, "version": KASAUTI_VERSION, "scoring_date": day,
+                   "kind": "in-sample reconstruction" if late else "live record",
+                   "kind_note": ("computed after the fact from point-in-time inputs; it is not what KASAUTI said on that date"
+                                 if late else "computed on the scoring date"),
+                   "frozen": bool(fz and fz.get("version") == KASAUTI_VERSION), "score": s["score"], "confidence": s["confidence"],
+                   "status": s["status"], "playbook": s["playbook"], "peer_group": s["peer_group"], "n_peers": s["n_peers"],
+                   "detail": s["detail"], "pillar_weights": {k: [{"pillar": p.name, "weight": p.weight} for p in v] for k, v in cfg.profiles.items()},
+                   "note": "a research ranking among sector peers, not a rating, target price or advice"}, a)
+
+
 @app.get("/api/company/{code}/dupont")
 def dupont(code: str, as_of: str = AS_OF, exchange: str = "NSE"):
     a = asof(as_of)

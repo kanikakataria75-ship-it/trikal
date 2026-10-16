@@ -9,6 +9,7 @@ never imports `trikal_core.db` directly.
 from __future__ import annotations
 
 import datetime as dt
+import json
 import re
 from dataclasses import dataclass
 
@@ -914,3 +915,51 @@ def _segments(self: PitReader, security_id: str, as_of: AsOf, months: int = 12, 
 
 
 PitReader.segments = _segments  # type: ignore[attr-defined]
+
+
+def _kasauti_dates(self: PitReader, version: int) -> list[dt.date]:
+    return [r[0] for r in self.con.execute("SELECT DISTINCT as_of FROM kasauti_score WHERE version = ? ORDER BY 1", [version]).fetchall()]
+
+
+def _kasauti_scores(self: PitReader, version: int, day: dt.date, security_id: str | None = None) -> list[dict]:
+    """Stored KASAUTI scores of one version for one scoring date (all securities, or one)."""
+    q = """SELECT security_id, score, confidence, status, playbook, peer_group, n_peers, detail, computed_at
+           FROM kasauti_score WHERE version = ? AND as_of = ?"""
+    args: list = [version, day]
+    if security_id:
+        q += " AND security_id = ?"
+        args.append(security_id)
+    return [{"security_id": a, "as_of": day, "score": b, "confidence": c, "status": d, "playbook": e, "peer_group": f, "n_peers": g,
+             "detail": json.loads(h) if h else None, "computed_at": i}
+            for a, b, c, d, e, f, g, h, i in self.con.execute(q + " ORDER BY security_id", args).fetchall()]
+
+
+def _kasauti_latest(self: PitReader, version: int, security_id: str, as_of: AsOf) -> dict | None:
+    """The newest stored score of `security_id` for a scoring date on or before the as-of date. A score written long after its
+    scoring date is a reconstruction (in-sample); the caller compares `computed_at` with `as_of` to label it."""
+    r = self.con.execute(
+        """SELECT as_of FROM kasauti_score WHERE version = ? AND security_id = ? AND as_of <= ?
+           ORDER BY as_of DESC LIMIT 1""", [version, security_id, as_of.date_ist]).fetchone()
+    return (self.kasauti_scores(version, r[0], security_id) or [None])[0] if r else None
+
+
+PitReader.kasauti_dates = _kasauti_dates  # type: ignore[attr-defined]
+PitReader.kasauti_scores = _kasauti_scores  # type: ignore[attr-defined]
+PitReader.kasauti_latest = _kasauti_latest  # type: ignore[attr-defined]
+
+
+def _reported(self: PitReader, security_id: str, as_of: AsOf, concept: str) -> dict | None:
+    """The latest company-stated figure (results deck) of `concept` known at as_of: newest quarter first, latest version of it."""
+    try:
+        r = self.con.execute(
+            """SELECT value, unit, period_end, known_at, source_url, page, snippet, method, confidence
+               FROM fact_reported WHERE security_id = ? AND concept = ? AND known_at <= ?
+               ORDER BY period_end DESC, known_at DESC LIMIT 1""", [security_id, concept, as_of.ts]).fetchone()
+    except Exception:                                    # a database created before the table existed: nothing has been read yet
+        return None
+    if not r:
+        return None
+    return dict(zip(("value", "unit", "period_end", "known_at", "source_url", "page", "snippet", "method", "confidence"), r))
+
+
+PitReader.reported = _reported  # type: ignore[attr-defined]

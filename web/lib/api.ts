@@ -130,6 +130,24 @@ export type GeoData = Envelope & { chokepoints: Chokepoint[]; corridors: GeoCorr
 export const useContextMarkers = (asOf: string) => useQuery({ queryKey: ["ctxm", asOf], queryFn: () => api<CtxMarkers>(`/api/context/markers?${q(asOf)}`), staleTime: Infinity });
 export const useGeo = (asOf: string) => useQuery({ queryKey: ["geo", asOf], queryFn: () => api<GeoData>(`/api/geo?${q(asOf)}`), staleTime: Infinity });
 
+export type KasMetric = { value: number | null; percentile: number | null; weight?: number; direction?: number };
+export type KasPillar = { score: number | null; coverage: number; metrics: Record<string, KasMetric> };
+export type KasDriver = { pillar: string; metric: string; value: number; percentile: number; points: number };
+export type Kasauti = Envelope & {
+  security_id: string; available: boolean; reason?: string; version?: number; scoring_date?: string; kind?: string; kind_note?: string; frozen?: boolean;
+  score?: number | null; confidence?: number | null; status?: string; playbook?: string; peer_group?: string; n_peers?: number; note?: string;
+  pillar_weights?: Record<string, { pillar: string; weight: number }[]>;
+  detail?: { profile: string; peer_fallback: boolean; pillars: Record<string, KasPillar>; dropped: Record<string, string>; skipped: Record<string, string>; drivers: KasDriver[] } | null;
+};
+export type KasHorizon = { dates: number; avg_n?: number; decile_mean_return?: Record<string, number>; top_minus_universe?: number; d10_minus_d1?: number;
+  ic_mean?: number | null; ic_t_newey_west?: number | null; ic_positive_share?: number | null; hit_rate_top_beats_universe?: number; delisted_exits?: number;
+  by_year_ic?: Record<string, { ic_mean: number; dates: number }> };
+export type KasReport = Envelope & { available: boolean; reason?: string; frozen?: { version: number; sha256: string; frozen_at: string } | null;
+  report?: { label: string; data_end: string; dates: string[]; horizons: Record<string, KasHorizon>; conventions: Record<string, string | number>;
+    portfolio: { periods: number; years?: number; cagr_net?: number; cagr_benchmark?: number; max_drawdown?: number; max_drawdown_benchmark?: number; avg_turnover?: number; cost_per_side?: number } } };
+export const useKasauti = companyHook<Kasauti>("kasauti");
+export const useKasautiReport = (asOf: string) => useQuery({ queryKey: ["kasauti-report", asOf], queryFn: () => api<KasReport>(`/api/kasauti/report?${q(asOf)}`), staleTime: Infinity });
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }

@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 
-export type FnCode = "DES" | "GP" | "FA" | "DUP" | "CR" | "RV" | "WC" | "OWN" | "SEG" | "DCF" | "EVT" | "MACRO" | "MAP" | "TX" | "GEO" | "HELP";
+export type FnCode = "DES" | "GP" | "FA" | "DUP" | "CR" | "RV" | "WC" | "OWN" | "SEG" | "KAS" | "DCF" | "EVT" | "MACRO" | "MAP" | "TX" | "GEO" | "HELP";
 
 /* cinema = the premium 3D experience; pro = dense, flat, keyboard-first workstation (same data, same rules). */
 export type Mode = "cinema" | "pro";

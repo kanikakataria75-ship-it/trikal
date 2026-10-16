@@ -87,3 +87,27 @@
 .seg-chart { height: 230px; min-height: 180px; }
 .seg-tab td:first-child { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .seg-tab th:not(:first-child), .seg-tab td:not(:first-child) { text-align: right; }
+
+/* KAS — KASAUTI */
+.kas { display: flex; flex-direction: column; gap: 10px; }
+.kas-head { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+.kas-score { display: flex; align-items: baseline; gap: 6px; }
+.kas-score b { font-size: 54px; line-height: 1; color: var(--gold-0); font-weight: 500; }
+.kas-score span { color: var(--fg-2); font-size: 13px; }
+.kas-meta { font-size: 12px; line-height: 1.55; min-width: 240px; flex: 1; }
+.kas-kind { display: inline-block; padding: 0 7px; border: 1px solid var(--warn); color: var(--warn); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; }
+.kas-kind.live { border-color: var(--pos); color: var(--pos); }
+.kas-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 16px; }
+@media (max-width: 760px) { .kas-grid, .kas-rc { grid-template-columns: 1fr !important; } }
+.kas-row { display: grid; grid-template-columns: 110px 1fr 30px 38px; gap: 8px; align-items: center; font-size: 12px; padding: 3px 0; }
+.kas-row i { font-style: normal; font-size: 10px; text-align: right; }
+.kas-bar { display: block; height: 6px; background: rgba(38, 43, 51, 0.8); }
+.kas-bar i { display: block; height: 100%; background: var(--gold-2); }
+.kas-bar i.pos { background: var(--pos); } .kas-bar i.neg { background: var(--neg); }
+.kas-drop { margin: 4px 0 0; padding-left: 14px; font-size: 11px; line-height: 1.5; color: var(--fg-2); }
+.kas-drop b { color: var(--fg-1); font-weight: 500; }
+.kas-all td { font-size: 11px; padding: 1px 6px; } .kas-all tr.dim { opacity: 0.45; }
+.kas-card { border-top: 1px solid var(--line); padding-top: 10px; }
+.kas-warn { font-size: 11px; color: var(--warn); margin: 4px 0 6px; line-height: 1.5; }
+.kas-rc { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: center; margin-top: 6px; }
+.kas-dec { height: 170px; }

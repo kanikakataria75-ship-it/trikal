@@ -1,4 +1,4 @@
-# TRIKAL data coverage — generated 2026-10-16 16:00 IST
+# TRIKAL data coverage — generated 2026-10-16 16:33 IST
 
 ## Trading calendar (from the fetch log)
 Target range = earliest file we try to fetch -> today. Unknown = not answered yet (not fetched / fetch error / untrusted placeholder).
@@ -99,12 +99,12 @@ The 'known to exist' counts only cover companies whose filing lists have been do
 |---|---|---|
 | company lists (5 endpoints x symbols) | 7,950 | 7,950 |
 | results XBRL documents (listed so far) | 54,294 | 54,294 |
-| old results HTML pages (listed so far) | 40,476 | 41,735 |
+| old results HTML pages (listed so far) | 41,735 | 41,735 |
 | shareholding XBRL documents (listed so far) | 20,207 | 20,207 |
 
 | kind | family | filings parsed | securities | earliest period | latest period |
 |---|---|---|---|---|---|
-| results_html | HTML | 36,375 | 837 | 2008-03-31 | 2017-12-31 |
+| results_html | HTML | 37,525 | 838 | 2008-03-31 | 2017-12-31 |
 | results_xbrl | INDAS | 38,490 | 982 | 2017-06-30 | 2024-12-31 |
 | results_xbrl | INTEGRATED | 11,985 | 999 | 2024-06-30 | 2026-09-30 |
 | results_xbrl | NBFC_INDAS | 2,208 | 94 | 2019-09-30 | 2024-12-31 |
@@ -112,7 +112,7 @@ The 'known to exist' counts only cover companies whose filing lists have been do
 | results_xbrl | NONINDAS | 114 | 53 | 2018-03-31 | 2024-09-30 |
 | shp_xbrl | SHP | 20,135 | 1,039 | 2018-03-31 | 2026-10-01 |
 
-PIT fact rows (value changes only): **5,418,097** for **1159** securities.
+PIT fact rows (value changes only): **5,441,068** for **1160** securities.
 
 Accounting-identity checks (each compares two quantities a filing states independently):
 
@@ -142,9 +142,9 @@ Sector classification (every row carries method and confidence):
 | kind | severity | count |
 |---|---|---|
 | adj_unverifiable | low | 72,918 |
+| shp_pct_mismatch | low | 3,185 |
 | unexplained_price_jump | medium | 2,723 |
-| shp_pct_mismatch | low | 2,672 |
-| results_html_parse_error | medium | 897 |
+| results_html_parse_error | medium | 1,205 |
 | adj_implied_confirmed | low | 765 |
 | fin_html_income_statement_chain | low | 500 |
 | fin_pbt_minus_tax_equals_pat_continuing | low | 482 |
@@ -153,8 +153,8 @@ Sector classification (every row carries method and confidence):
 | adj_parsed_unconfirmed | low | 31 |
 | adj_parsed_price_disagrees | medium | 27 |
 | index_out_already_member | medium | 19 |
-| results_xbrl_parse_error | medium | 7 |
-| multi_stem_episode | medium | 2 |
+| results_xbrl_parse_error | medium | 8 |
 | adj_parsed_confirmed_wide | low | 2 |
+| multi_stem_episode | medium | 2 |
 | index_snapshot_placeholder | low | 1 |
 | adj_mismatch | medium | 1 |

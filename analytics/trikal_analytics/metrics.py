@@ -78,9 +78,15 @@ class Ctx:
         return self._sh[key]
 
     def series(self, li: str) -> list[FinValue]:
-        if li not in self._series:
-            self._series[li] = self.r.financials(self.sid, self.as_of, [li], basis=self.basis)
-        return self._series[li]
+        """All versions of one line item. The whole company is read in one query the first time (about twenty line items are
+        asked for in a normal analysis), and shared with the other Ctx objects of the same company and as-of."""
+        key = ("all_series", self.basis)
+        if key not in self._sh:
+            by: dict[str, list[FinValue]] = {}
+            for v in self.r.financials(self.sid, self.as_of, None, basis=self.basis):
+                by.setdefault(v.line_item, []).append(v)
+            self._sh[key] = by
+        return self._sh[key].get(li, [])
 
     def _note(self, vals: list[FinValue]) -> None:
         for v in vals:
@@ -139,7 +145,9 @@ class Ctx:
 
     # ---- market data ---------------------------------------------------------------------------------
     def price(self) -> tuple[dt.date, float] | None:
-        return self.r.last_price(self.sid, self.as_of)
+        if "price" not in self._sh:
+            self._sh["price"] = self.r.last_price(self.sid, self.as_of)
+        return self._sh["price"]
 
     def shares(self) -> tuple[float, list[FinValue]] | None:
         """Shares outstanding = paid-up equity capital / face value, rolled forward for splits and bonuses that
@@ -636,6 +644,9 @@ for _m, _u in (("nim", "ratio"), ("casa_ratio", "ratio"), ("pcr", "ratio"), ("sl
     _external(_m, _u)
 
 
+REPORTED_MAX_AGE_DAYS = 200      # a deck figure older than about two quarters is stale, not current
+
+
 class Engine:
     def __init__(self, reader: PitReader, registry: pbmod.Registry | None = None) -> None:
         self.r = reader
@@ -667,6 +678,12 @@ class Engine:
         res.playbook.check_metric(metric_id)          # raises ForbiddenMetric: no number is ever produced
         spec = REGISTRY[metric_id]
         if spec.external:
+            rep = self.r.reported(security_id, as_of, metric_id)
+            if rep and (as_of.date_ist - rep["period_end"]).days <= REPORTED_MAX_AGE_DAYS:
+                return Value(metric_id, rep["value"], spec.unit, as_of.ts,
+                             (Input(metric_id, rep["value"], rep["period_end"], f"deck:{rep['method']}", rep["source_url"], rep["known_at"]),),
+                             None, ("as_stated_in_results_deck",),
+                             f"as the company states it in its results deck (page {rep['page']}): {rep['snippet']}")
             src = res.playbook.requires.get(metric_id, "an external source not yet ingested")
             return NotAvailable(metric_id, (metric_id,), f"needs {src}")
         c = self._ctx(security_id, as_of, basis)

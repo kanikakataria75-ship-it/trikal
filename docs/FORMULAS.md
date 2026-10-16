@@ -314,3 +314,13 @@ known then, split/bonus adjusted prices), `r_mkt` the equal-weight return of all
 - It is an estimated price response from history. It is not an earnings forecast, not a causal channel, and not advice.
 - Chokepoint intensity = dated news items matching the area's keyword pattern in the trailing 3 months, as a percentile of the same
   count for every earlier 3-month window up to the as-of. Context only; never an input to any metric.
+
+## KASAUTI v1 (2026-10-16, config/scores/kasauti_v1.yaml)
+
+For a company C on scoring date t, with peer set P (same playbook among the Nifty 500 members on t; the parent group if |P| < 8):
+- metric percentile `p(m) = (#{x < v} + 0.5·#{x = v}) / n` over the peers with a value (at least 5), flipped (`1 − p`) when lower is better;
+- pillar score = Σ w_m·p(m) / Σ w_m over the metrics with a value; pillar coverage = Σ w_m (with value) / Σ w_m (all); a pillar below 50% coverage is dropped;
+- score = 100 · Σ W_k·pillar_k / Σ W_k over kept pillars, requiring at least 3; confidence = Σ W_k·coverage_k over kept pillars (weights sum to 1, so a dropped pillar lowers it);
+- driver points of a metric = 100·(W_k/ΣW)·(w_m/Σw)·(p(m) − 0.5).
+Ownership inputs are changes over about four quarters (promoter, and mutual funds + FPI + insurance together, in percentage points) and the pledge as % of total shares (live record only: the exchange keeps no pledge history). Momentum is the adjusted close 21 sessions ago over the close 252 sessions ago (12-1 months) and the 126-session return.
+Report card: forward return = open at the first session on or after (entry + h months) over the open of the first session after the scoring date; rank IC = Spearman correlation of score and forward return per date; t-statistic of the mean IC with Newey-West (Bartlett) weights and lag `ceil(h/3) − 1`; the portfolio holds the top 10% equal weight from one scoring date to the next and pays `cost_per_side` on every name bought or sold.

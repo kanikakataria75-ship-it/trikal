@@ -191,6 +191,30 @@ CREATE TABLE IF NOT EXISTS fact_financial (
     is_restated BOOLEAN                      -- true when an earlier-known row had a different value
 );
 
+-- Figures a company states in its results deck (investor presentation) that the XBRL results do not carry: NIM, CASA, PCR ... Each row
+-- keeps the deck, page and the line it was read from (rule-based extraction, no model). Valid time = the quarter, known_at = announcement.
+CREATE TABLE IF NOT EXISTS fact_reported (
+    security_id VARCHAR, concept VARCHAR, period_end DATE,
+    value DOUBLE, unit VARCHAR,
+    method VARCHAR, confidence DOUBLE,
+    source_url VARCHAR, source_sha VARCHAR, page INTEGER, snippet VARCHAR,
+    known_at TIMESTAMPTZ, known_precision VARCHAR, recorded_at TIMESTAMPTZ
+);
+-- Which decks have been read (so a re-run only reads new ones) and what came of it.
+CREATE TABLE IF NOT EXISTS deck_parsed (
+    source_url VARCHAR, symbol VARCHAR, announced_at TIMESTAMPTZ, period_end DATE, status VARCHAR, n_values INTEGER,
+    detail VARCHAR, parsed_at TIMESTAMPTZ
+);
+
+-- KASAUTI scores, one row per (score version, scoring date, security). Derived data: reproducible from the PIT inputs, kept so that
+-- the report card and the live record are fixed once written. `detail` is the JSON breakdown (pillars, metrics, percentiles, drivers).
+CREATE TABLE IF NOT EXISTS kasauti_score (
+    version INTEGER, as_of DATE, security_id VARCHAR,
+    score DOUBLE, confidence DOUBLE, status VARCHAR,
+    playbook VARCHAR, peer_group VARCHAR, n_peers INTEGER,
+    detail VARCHAR, computed_at TIMESTAMPTZ
+);
+
 -- Quarterly shareholding pattern: summary from the list API + category rows from the SHP XBRL.
 CREATE TABLE IF NOT EXISTS shareholding (
     security_id VARCHAR, period_end DATE,

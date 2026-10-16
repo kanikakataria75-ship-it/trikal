@@ -10,6 +10,7 @@ export const FUNCTIONS: Record<FnCode, { label: string; desc: string }> = {
   RV: { label: "Relative value", desc: "Peers in the same sector and playbook, same as-of" },
   WC: { label: "What changed", desc: "Metric moves and events in the last quarter" },
   OWN: { label: "Ownership", desc: "Promoter, institutions, public; pledge" },
+  KAS: { label: "KASAUTI", desc: "Sector-relative score with pillars, drivers, what was left out, and the report card that audits it" },
   SEG: { label: "Segments", desc: "Reportable segments as the company files them: revenue, result, assets, mix over time" },
   DCF: { label: "Valuation Lab", desc: "Methods the sector allows; assumptions labelled; ranges, never targets" },
   EVT: { label: "Events", desc: "Corporate actions, results, index changes — each with its public time" },
@@ -77,7 +78,7 @@ export function parse(input: string, today: string): Parsed {
   const fn = (t[1] ?? "DES") as FnCode;
   if (t[1] && !(t[1] in FUNCTIONS)) {
     if (t[1] in LATER) return { kind: "later", word: t[1], milestone: LATER[t[1]] };
-    return { kind: "bad", why: `Unknown function “${t[1]}”. Try DES, GP, FA, DUP, CR, RV, WC, OWN, SEG, DCF, EVT.` };
+    return { kind: "bad", why: `Unknown function “${t[1]}”. Try DES, GP, FA, DUP, CR, RV, WC, OWN, SEG, KAS, DCF, EVT.` };
   }
   return { kind: "entity", code: t[0], fn };
 }

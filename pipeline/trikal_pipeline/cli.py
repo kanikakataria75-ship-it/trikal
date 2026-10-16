@@ -360,6 +360,82 @@ def check_financials() -> None:
         typer.echo(f"{name:45s} checked={n:6d} ok={ok:6d} pass={'n/a' if share is None else f'{share:.1%}'}")
 
 
+@app.command("kasauti-score")
+def kasauti_score_cmd(date: str = typer.Option("", help="scoring date YYYY-MM-DD (default: the last session)"), version: int = 1) -> None:
+    """Score the Nifty 500 of one date and store it (the live record once the version is frozen). Stop the API first."""
+    from trikal_core.db import init_schema
+    from trikal_kasauti import config as KC
+    from trikal_pipeline import kasauti_run as KR
+
+    con = _connect_wait()
+    init_schema(con)
+    day = dt.date.fromisoformat(date) if date else con.execute("SELECT max(trade_date) FROM price_eod WHERE exchange = 'NSE'").fetchone()[0]
+    typer.echo(KR.score_date(con, KC.load(version), day))
+
+
+@app.command("kasauti-backtest")
+def kasauti_backtest_cmd(limit: int = typer.Option(0, help="score at most this many new dates (0 = all)"), version: int = 1) -> None:
+    """Score every quarterly rebalance date, then build the report card (data/kasauti/report_vN.json). Stop the API first."""
+    from trikal_core.db import init_schema
+    from trikal_kasauti import config as KC
+    from trikal_pipeline import kasauti_run as KR
+
+    con = _connect_wait()
+    init_schema(con)
+    rep = KR.run_backtest(con, KC.load(version), limit or None, log=typer.echo)
+    typer.echo({h: {k: v for k, v in d.items() if k in ("dates", "ic_mean", "ic_t_newey_west", "d10_minus_d1", "top_minus_universe")}
+                for h, d in rep.get("horizons", {}).items()})
+    p = rep.get("portfolio", {})
+    typer.echo({k: p.get(k) for k in ("periods", "cagr_net", "cagr_benchmark", "max_drawdown", "max_drawdown_benchmark", "avg_turnover")})
+
+
+@app.command("fetch-decks")
+def fetch_decks_cmd(symbols: str = typer.Option("", help="comma-separated NSE symbols (default: Financial Services names of the pilot universe)"),
+                    per_symbol: int = 12) -> None:
+    """Download results decks (investor presentations) of banks / NBFCs: lists first, then the newest PDFs. Raw zone only."""
+    from trikal_pipeline.sources import nse_decks as ND
+
+    raw, fetcher = RawStore(), Fetcher()
+    syms = [x.strip().upper() for x in symbols.split(",") if x.strip()]
+    if not syms:
+        con = _connect_wait()
+        syms = [r[0] for r in con.execute(
+            """SELECT DISTINCT l.code FROM listing l JOIN classification c ON c.security_id = l.security_id AND c.scheme = 'NSE_INDUSTRY'
+               WHERE l.exchange = 'NSE' AND c.code = 'Financial Services' AND l.valid_to >= current_date - INTERVAL 400 DAY ORDER BY 1""").fetchall()]
+        con.close()
+    typer.echo(f"{len(syms)} symbols")
+    typer.echo(f"lists: {ND.fetch_lists(syms, fetcher, raw)}")
+    typer.echo(f"pdfs: {ND.fetch_pdfs(fetcher, raw, syms, per_symbol)}")
+    fetcher.close()
+
+
+@app.command("build-reported")
+def build_reported_cmd(limit: int = typer.Option(0, help="read at most this many decks (0 = all)")) -> None:
+    """Read downloaded decks into fact_reported (NIM, CASA, PCR, slippage, CAR). Stop the API first."""
+    from trikal_core.db import init_schema
+    from trikal_pipeline.load_reported import build_reported
+
+    con = _connect_wait()
+    init_schema(con)
+    typer.echo(build_reported(con, RawStore(), limit=limit or None, log=typer.echo))
+
+
+@app.command("kasauti-freeze")
+def kasauti_freeze_cmd(version: int = 1) -> None:
+    """Pin a score version: its SHA-256 goes to config/scores/FROZEN.json and a test fails if the file ever changes.
+    Results before this moment are the in-sample backtest; from now on scores are a live record."""
+    import json
+
+    from trikal_kasauti import config as KC
+
+    cfg = KC.load(version)
+    f = KC.SCORES_DIR / "FROZEN.json"
+    if f.exists() and json.loads(f.read_text(encoding="utf-8")).get("version") == version:
+        raise typer.BadParameter("already frozen; a change means a new version file")
+    f.write_text(json.dumps({"version": version, "sha256": cfg.sha256, "frozen_at": dt.datetime.now().astimezone().isoformat()}, indent=1), encoding="utf-8")
+    typer.echo(f"frozen v{version} sha256 {cfg.sha256}")
+
+
 @app.command("relabel-dims")
 def relabel_dims_cmd() -> None:
     """One-off after the parser started naming segment / other-expense members: re-read the filings that have them,

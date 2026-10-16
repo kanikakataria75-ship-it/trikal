@@ -28,7 +28,7 @@ dev = ["pytest>=8", "hypothesis>=6.100"]
 trikal = "trikal_pipeline.cli:app"
 
 [tool.setuptools.packages.find]
-where = ["core", "pipeline", "analytics", "api"]
+where = ["core", "pipeline", "analytics", "kasauti", "api"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
