@@ -71,18 +71,20 @@ function proLayout(api: DockviewApi) {
   add("EVT", "FA", "within");
   add("WC", "MACRO", "within");
   add("OWN", "MACRO", "within");
-  add("SEG", "FA", "within");
-  add("KAS", "DES", "within");
-  add("CALL", "DES", "within");
+  // the research views (KASAUTI, segments, concalls) sit beside the financial statements in a group of their own, so nothing covers anything
+  add("KAS", "FA", "right");
+  add("SEG", "KAS", "within");
+  add("CALL", "KAS", "within");
   add("TX", "MACRO", "within");
   add("GEO", "MACRO", "within");
-  for (const id of ["RV", "FA", "MACRO"] as const) api.getPanel(id)?.api.setActive();
+  for (const id of ["RV", "FA", "KAS", "MACRO", "DES"] as const) api.getPanel(id)?.api.setActive();
   const size = () => {
     try {
       const w = api.width, h = api.height;
       if (!w || !h) return;
       api.getPanel("DES")?.group.api.setSize({ width: Math.round(w * 0.22) });
-      api.getPanel("MAP")?.group.api.setSize({ width: Math.round(w * 0.34) });
+      api.getPanel("MAP")?.group.api.setSize({ width: Math.round(w * 0.27) });
+      api.getPanel("KAS")?.group.api.setSize({ width: Math.round(w * 0.2) });
       api.getPanel("GP")?.group.api.setSize({ height: Math.round(h * 0.58) });
       api.getPanel("DES")?.group.api.setSize({ height: Math.round(h * 0.46) });
       api.getPanel("MAP")?.group.api.setSize({ height: Math.round(h * 0.5) });
@@ -106,7 +108,7 @@ function defaultLayout(api: DockviewApi, mode: Mode = "cinema") {
   api.addPanel({ id: "RV", component: "RV", title: title("RV"), params: {}, position: { referencePanel: "DUP", direction: "below" } });
   api.addPanel({ id: "WC", component: "WC", title: title("WC"), params: {}, position: { referencePanel: "RV", direction: "within" } });
   api.addPanel({ id: "OWN", component: "OWN", title: title("OWN"), params: {}, position: { referencePanel: "RV", direction: "within" } });
-  api.addPanel({ id: "SEG", component: "SEG", title: title("SEG"), params: {}, position: { referencePanel: "FA", direction: "within" } });
+  api.addPanel({ id: "SEG", component: "SEG", title: title("SEG"), params: {}, position: { referencePanel: "RV", direction: "within" } });
   api.addPanel({ id: "KAS", component: "KAS", title: title("KAS"), params: {}, position: { referencePanel: "RV", direction: "within" } });
   api.addPanel({ id: "CALL", component: "CALL", title: title("CALL"), params: {}, position: { referencePanel: "RV", direction: "within" } });
   api.addPanel({ id: "MACRO", component: "MACRO", title: title("MACRO"), params: {}, position: { referencePanel: "RV", direction: "within" } });

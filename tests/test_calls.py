@@ -129,3 +129,10 @@ def test_endpoint_serves_statements_judged_at_the_as_of_date(con, monkeypatch):
     assert c.get("/api/company/CALLCO/concalls?as_of=2025-07-01").json()["calls"] == 0                         # not public yet
     assert c.get("/api/company/CALLCO/concalls?as_of=2025-08-01").json()["promises"][0]["verdict"] == "pending"
     assert c.get("/api/company/CALLCO/concalls").status_code == 422
+
+
+def test_one_sentence_with_two_figures_gives_two_promises_each_with_its_own_metric():
+    ps = CP.read_promises("Our FY27 growth guidance is now 2.5% to 4%, and our EBIT margin guidance remains at 17.5% to 18.5%.", 3, CP.fy_end_of(CALL_Q))
+    got = {p.metric: (p.low, p.high) for p in ps}
+    assert got == {"revenue_growth": (2.5, 4.0), "ebitda_margin": (17.5, 18.5)}
+    assert CP.read_promises("Revenue growth and margin guidance is 17% to 18% for FY27.", 3, CP.fy_end_of(CALL_Q)) == []     # two metrics, one figure: ambiguous

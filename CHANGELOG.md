@@ -209,3 +209,10 @@ No LLM budget, so the M6 gaps are filled from what the exchange already files in
 - `analytics/promises.py`: deterministic verdicts against the company's own later results at the as-of date (kept / partly / missed /
   pending / not judged), management credibility (needs 4 judged statements), tone change vs the previous call and the average of four.
 - `/api/company/{code}/concalls`, terminal panel `CALL`. `build-calls` loads `concall` / `concall_promise`. 203 tests.
+
+## Terminal polish (2026-10-16)
+- PRO layout: KASAUTI, segments and concalls sit in a group of their own beside the financial statements, so no tab covers another.
+- Chart drawing tools on `GP` (✎ Draw): trend line / ray, horizontal and vertical lines, support-resistance zones, Fibonacci retracement, text notes,
+  measure; move, edit, recolour, delete, undo; saved per stock in the browser. Anchored to (bar, price), so they follow pan, zoom and log/linear.
+- `TRIKAL.bat` starts the data server and the terminal and opens the browser; `STOP_TRIKAL.bat` stops both.
+- Concall parser: a sentence with two figures gives two statements, each with its own metric.

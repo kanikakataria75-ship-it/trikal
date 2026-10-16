@@ -4,7 +4,8 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AreaSeries, CandlestickSeries, ColorType, CrosshairMode, HistogramSeries, PriceScaleMode, createChart, createSeriesMarkers, type IChartApi, type UTCTimestamp } from "lightweight-charts";
+import { AreaSeries, CandlestickSeries, ColorType, CrosshairMode, HistogramSeries, PriceScaleMode, createChart, createSeriesMarkers, type IChartApi, type ISeriesApi, type SeriesType, type UTCTimestamp } from "lightweight-charts";
+import ChartDraw from "./ChartDraw";
 import { useCompany, useLive, usePrices, useTimeline, type Streak } from "@/lib/api";
 import { dmy, dmyTime, indianGroup, METRIC_LABEL } from "@/lib/format";
 import { FUNCTIONS } from "@/lib/commands";
@@ -170,6 +171,7 @@ export function GP({ params }: PanelProps) {
   const q = usePrices(code, asOf, { adjusted: adjusted === "adj" });
   const el = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const [drawApi, setDrawApi] = useState<{ chart: IChartApi; series: ISeriesApi<SeriesType> } | null>(null);
   const [hover, setHover] = useState<{ t: string; c: number; f: number } | null>(null);
   const [lines, setLines] = useState<{ x: number; date: string; short: string; long: string }[]>([]);
   const zoomTo = (date: string) => {
@@ -198,6 +200,7 @@ export function GP({ params }: PanelProps) {
       : chart.addSeries(CandlestickSeries, { upColor: "#2EC4B6", downColor: "#F0577A", borderVisible: false, wickUpColor: "#2EC4B6", wickDownColor: "#F0577A" });
     if (style === "area") main.setData(b.t.map((t, i) => ({ time: time(t), value: b.c[i] })));
     else main.setData(b.t.map((t, i) => ({ time: time(t), open: b.o[i] ?? b.c[i], high: b.h[i] ?? b.c[i], low: b.l[i] ?? b.c[i], close: b.c[i] })));
+    setDrawApi({ chart, series: main as ISeriesApi<SeriesType> });
     const vol = chart.addSeries(HistogramSeries, { priceScaleId: "", priceFormat: { type: "volume" }, color: "rgba(167,169,174,0.18)" });
     vol.priceScale().applyOptions({ scaleMargins: { top: 0.84, bottom: 0 } });
     vol.setData(b.t.map((t, i) => ({ time: time(t), value: b.v[i] ?? 0 })));
@@ -230,7 +233,7 @@ export function GP({ params }: PanelProps) {
       const i = b.t.indexOf(iso);
       if (i >= 0) setHover({ t: iso, c: b.c[i], f: b.f[i] });
     });
-    return () => { chart.remove(); chartRef.current = null; };
+    return () => { setDrawApi(null); chart.remove(); chartRef.current = null; };
   }, [q.data, style, log]);
 
   const range = (years: number | null) => {
@@ -268,6 +271,7 @@ export function GP({ params }: PanelProps) {
             )}
             <div className="gp-wrap">
               <div ref={el} className="gp-chart" />
+              <ChartDraw chart={drawApi?.chart ?? null} series={drawApi?.series ?? null} code={code} bars={q.data!.bars.t.length} />
               <div className="gp-lines" aria-hidden>
                 {lines.map((l) => (
                   <div key={l.date} className="gp-line" style={{ left: l.x }}>

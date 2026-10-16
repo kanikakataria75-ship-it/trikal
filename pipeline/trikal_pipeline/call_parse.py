@@ -134,32 +134,59 @@ def _metric(sentence: str) -> str | None:
     return None
 
 
+CLAUSE_SPLIT = re.compile(r",?\s+(?:and|while|whereas|but)\s+(?=(?:our|the|we|its|for)\b)|;\s*|,\s+(?=(?:our|the)\s+\w+(?:\s+\w+)?\s+(?:guidance|margin))", re.I)
+
+
+def _metrics_in(text: str) -> list[str]:
+    found = []
+    for name in METRICS:
+        if METRICS[name].search(text):
+            if name in ("revenue_growth", "profit_growth") and not GROWTH_WORD.search(text) and not DOUBLE_DIGIT.search(text):
+                continue
+            found.append(name)
+    return found
+
+
 def read_promise(sentence: str, page: int, call_fy: dt.date) -> Promise | None:
+    ps = read_promises(sentence, page, call_fy)
+    return ps[0] if ps else None
+
+
+def read_promises(sentence: str, page: int, call_fy: dt.date) -> list[Promise]:
+    """Every statement with a number in a sentence. A sentence that gives two figures for two metrics gives two promises."""
     if QUESTION.search(sentence) or NEGATED.search(sentence) or ADDRESSED.search(sentence) or not FORWARD.search(sentence):
-        return None
+        return []
     if PAST.search(sentence) and not STRONG.search(sentence):
-        return None
-    metric = _metric(sentence)
-    if metric is None:
-        return None
-    m = RANGE.search(sentence)
-    if m:
-        lo, hi = sorted((float(m.group(1)), float(m.group(2))))
-        op = "range"
-    elif DOUBLE_DIGIT.search(sentence) and metric in ("revenue_growth", "profit_growth"):
-        lo, hi, op = 10.0, 99.0, "at_least"
-    else:
-        m = PCT.search(sentence)
-        if not m:
-            return None
-        lo = hi = float(m.group(1))
-        op = "at_least" if AT_LEAST.search(sentence) else "at_most" if AT_MOST.search(sentence) else "about"
-        if op == "about" and not ABOUT.search(sentence) and not STRONG.search(sentence):
-            return None                                          # a bare percentage with no stance: could be anything
-    if not (0 < hi <= 150):
-        return None
+        return []
     horizon, kind = _horizon(sentence, call_fy)
-    return Promise(metric, op, lo, hi, horizon, kind, sentence[:420], page)
+    out: list[Promise] = []
+    for clause in CLAUSE_SPLIT.split(sentence):
+        if not clause or not (RANGE.search(clause) or PCT.search(clause) or DOUBLE_DIGIT.search(clause)):
+            continue
+        ms = _metrics_in(clause)
+        if not ms and GROWTH_WORD.search(clause) and re.search(r"guidance", sentence, re.I) and not METRICS["ebitda_margin"].search(clause):
+            ms = ["revenue_growth"]                                      # 'FY27 growth guidance is 2.5% to 4%': growth of revenue
+        if len(ms) != 1:
+            continue                                                     # none, or two metrics sharing one number: ambiguous, left out
+        metric = ms[0]
+        m = RANGE.search(clause)
+        if m:
+            lo, hi = sorted((float(m.group(1)), float(m.group(2))))
+            op = "range"
+        elif DOUBLE_DIGIT.search(clause) and metric in ("revenue_growth", "profit_growth"):
+            lo, hi, op = 10.0, 99.0, "at_least"
+        else:
+            m = PCT.search(clause)
+            if not m:
+                continue
+            lo = hi = float(m.group(1))
+            op = "at_least" if AT_LEAST.search(clause) else "at_most" if AT_MOST.search(clause) else "about"
+            if op == "about" and not ABOUT.search(clause) and not STRONG.search(sentence):
+                continue                                                 # a bare percentage with no stance: could be anything
+        if not (0 < hi <= 150):
+            continue
+        out.append(Promise(metric, op, lo, hi, horizon, kind, sentence[:420], page))
+    return out
 
 
 def tone_of(sentences_: list[str]) -> tuple[dict, dict]:
@@ -204,10 +231,12 @@ def parse_text(pages: list[str], announced: dt.date, call_quarter: dt.date) -> C
         all_s += [(n, s) for s in sentences(t)]
     seen = set()
     for n, s in all_s:
-        p = read_promise(s, n, call_fy)
-        if p and s[:80] not in seen:
+        if s[:80] in seen:
+            continue
+        ps = read_promises(s, n, call_fy)
+        if ps:
             seen.add(s[:80])
-            out.promises.append(p)
+            out.promises.extend(ps)
     qa = next((m for m in QA_MARKERS.finditer(body) if m.start() > 0.08 * len(body)), None)        # not the opening 'we will take questions later'
     split_at = qa.start() if qa else len(body)
     prepared = sentences(body[:split_at])
