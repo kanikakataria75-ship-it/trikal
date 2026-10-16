@@ -192,6 +192,16 @@ line_items:
     prefer_basis: standalone
     zero_is_missing: true
     sources: [{concept: PercentageOfNpa}]
+  dscr_reported:
+    statement: ratio
+    kind: flow
+    zero_is_missing: true
+    sources: [{concept: DebtServiceCoverageRatio}]
+  iscr_reported:
+    statement: ratio
+    kind: flow
+    zero_is_missing: true
+    sources: [{concept: InterestServiceCoverageRatio}]
   cet1_ratio:
     statement: bank
     kind: flow

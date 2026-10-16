@@ -1,4 +1,4 @@
-# TRIKAL data coverage — generated 2026-10-16 15:37 IST
+# TRIKAL data coverage — generated 2026-10-16 16:00 IST
 
 ## Trading calendar (from the fetch log)
 Target range = earliest file we try to fetch -> today. Unknown = not answered yet (not fetched / fetch error / untrusted placeholder).
@@ -34,17 +34,17 @@ Target range = earliest file we try to fetch -> today. Unknown = not answered ye
 | BSE | parsed_confirmed | 1 | 1,337 |
 | BSE | implied_confirmed | 0 | 213 |
 | BSE | parsed_unconfirmed | 1 | 19 |
-| BSE | parsed_price_disagrees | 0 | 12 |
-| BSE | parsed_confirmed_wide | 1 | 2 |
+| BSE | parsed_price_disagrees | 0 | 13 |
 | BSE | mismatch | 1 | 1 |
-| NSE | implied_only | 0 | 14,675 |
-| NSE | unverifiable | 0 | 4,171 |
+| BSE | parsed_confirmed_wide | 1 | 1 |
+| NSE | implied_only | 0 | 14,679 |
+| NSE | unverifiable | 0 | 3,120 |
 | NSE | parsed_confirmed | 1 | 1,451 |
 | NSE | implied_confirmed | 0 | 552 |
-| NSE | parsed_price_disagrees | 0 | 13 |
+| NSE | parsed_price_disagrees | 0 | 14 |
 | NSE | parsed_unconfirmed | 1 | 12 |
 | NSE | match | 1 | 2 |
-| NSE | parsed_confirmed_wide | 1 | 2 |
+| NSE | parsed_confirmed_wide | 1 | 1 |
 
 ## Index membership reconstruction
 
@@ -98,32 +98,32 @@ The 'known to exist' counts only cover companies whose filing lists have been do
 | raw download | answered | known to exist |
 |---|---|---|
 | company lists (5 endpoints x symbols) | 7,950 | 7,950 |
-| results XBRL documents (listed so far) | 54,133 | 54,294 |
+| results XBRL documents (listed so far) | 54,294 | 54,294 |
 | old results HTML pages (listed so far) | 40,476 | 41,735 |
 | shareholding XBRL documents (listed so far) | 20,207 | 20,207 |
 
 | kind | family | filings parsed | securities | earliest period | latest period |
 |---|---|---|---|---|---|
 | results_html | HTML | 36,375 | 837 | 2008-03-31 | 2017-12-31 |
-| results_xbrl | INDAS | 38,329 | 982 | 2017-06-30 | 2024-12-31 |
+| results_xbrl | INDAS | 38,490 | 982 | 2017-06-30 | 2024-12-31 |
 | results_xbrl | INTEGRATED | 11,985 | 999 | 2024-06-30 | 2026-09-30 |
 | results_xbrl | NBFC_INDAS | 2,208 | 94 | 2019-09-30 | 2024-12-31 |
 | results_xbrl | BANKING | 1,259 | 43 | 2018-03-31 | 2024-12-31 |
 | results_xbrl | NONINDAS | 114 | 53 | 2018-03-31 | 2024-09-30 |
 | shp_xbrl | SHP | 20,135 | 1,039 | 2018-03-31 | 2026-10-01 |
 
-PIT fact rows (value changes only): **5,401,895** for **1159** securities.
+PIT fact rows (value changes only): **5,418,097** for **1159** securities.
 
 Accounting-identity checks (each compares two quantities a filing states independently):
 
 | identity | checked | holds | pass rate |
 |---|---|---|---|
-| Total assets = total equity + total liabilities (balance sheet) | 13,742 | 13,742 | 100.0% |
-| Operating + investing + financing cash flow = net change in cash (before FX effect) | 14,689 | 14,689 | 100.0% |
+| Total assets = total equity + total liabilities (balance sheet) | 13,789 | 13,789 | 100.0% |
+| Operating + investing + financing cash flow = net change in cash (before FX effect) | 14,736 | 14,736 | 100.0% |
 | Old pages: profit before tax reconciles under at least one of the template conventions companies use (finance costs outside / inside 'total expenses'; other income separate / already in income) | 13,553 | 8,529 | 62.9% |
-| Income - Expenses = Profit before exceptional items and tax (Ind AS income statement) | 48,624 | 48,624 | 100.0% |
-| Profit before exceptional items + exceptional items = Profit before tax | 48,622 | 48,622 | 100.0% |
-| Profit before tax - tax expense = profit from continuing operations | 48,624 | 48,142 | 99.0% |
+| Income - Expenses = Profit before exceptional items and tax (Ind AS income statement) | 48,785 | 48,785 | 100.0% |
+| Profit before exceptional items + exceptional items = Profit before tax | 48,783 | 48,783 | 100.0% |
+| Profit before tax - tax expense = profit from continuing operations | 48,785 | 48,303 | 99.0% |
 
 Shareholding: 1039 securities, 709 quarter-ends (2015-12-31 .. 2026-10-01); 1037 with category detail (mutual funds / FPI / retail ...).
 
@@ -141,20 +141,20 @@ Sector classification (every row carries method and confidence):
 
 | kind | severity | count |
 |---|---|---|
-| adj_unverifiable | low | 73,969 |
-| unexplained_price_jump | medium | 2,715 |
-| shp_pct_mismatch | low | 2,159 |
+| adj_unverifiable | low | 72,918 |
+| unexplained_price_jump | medium | 2,723 |
+| shp_pct_mismatch | low | 2,672 |
+| results_html_parse_error | medium | 897 |
 | adj_implied_confirmed | low | 765 |
-| results_html_parse_error | medium | 598 |
 | fin_html_income_statement_chain | low | 500 |
 | fin_pbt_minus_tax_equals_pat_continuing | low | 482 |
 | symbol_change_unmatched | low | 62 |
 | index_in_not_member | medium | 60 |
 | adj_parsed_unconfirmed | low | 31 |
-| adj_parsed_price_disagrees | medium | 25 |
+| adj_parsed_price_disagrees | medium | 27 |
 | index_out_already_member | medium | 19 |
-| results_xbrl_parse_error | medium | 6 |
-| adj_parsed_confirmed_wide | low | 4 |
+| results_xbrl_parse_error | medium | 7 |
 | multi_stem_episode | medium | 2 |
-| adj_mismatch | medium | 1 |
+| adj_parsed_confirmed_wide | low | 2 |
 | index_snapshot_placeholder | low | 1 |
+| adj_mismatch | medium | 1 |

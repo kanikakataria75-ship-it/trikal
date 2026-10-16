@@ -9,6 +9,7 @@ never imports `trikal_core.db` directly.
 from __future__ import annotations
 
 import datetime as dt
+import re
 from dataclasses import dataclass
 
 import duckdb
@@ -870,3 +871,46 @@ PitReader.index_strata = _index_strata  # type: ignore[attr-defined]
 PitReader.gone_members = _gone_members  # type: ignore[attr-defined]
 PitReader.watermark = _watermark  # type: ignore[attr-defined]
 PitReader.stats = _stats  # type: ignore[attr-defined]
+
+
+def _segments(self: PitReader, security_id: str, as_of: AsOf, months: int = 12, limit: int = 8) -> dict:
+    """Reportable-segment disclosures as known at `as_of`: for every period of `months` length the segments' revenue, result
+    (profit before tax and finance cost), assets and liabilities, each from the latest filing known by then. Consolidated is used
+    where the company filed segments on that basis, else standalone. Labels are the company's own words."""
+    rows = self.con.execute(
+        """SELECT basis, concept, dims, period_end, value, known_at, filing_id
+           FROM fact_financial
+           WHERE security_id = ? AND known_at <= ? AND dims LIKE 'Segment=%' AND period_months = ?
+             AND concept IN ('SegmentRevenue', 'SegmentProfitLossBeforeTaxAndFinanceCosts', 'SegmentAssets', 'SegmentLiabilities')
+           QUALIFY row_number() OVER (PARTITION BY basis, concept, dims, period_start, period_end, unit
+                                      ORDER BY known_at DESC, filing_id DESC) = 1""",
+        [security_id, as_of.ts, months]).fetchall()
+    measure = {"SegmentRevenue": "revenue", "SegmentProfitLossBeforeTaxAndFinanceCosts": "result",
+               "SegmentAssets": "assets", "SegmentLiabilities": "liabilities"}
+    by_period: dict[tuple, dict] = {}
+    for basis, concept, dims, pe, value, ka, fid in rows:
+        p = by_period.setdefault((pe, basis), {"period_end": pe, "basis": basis, "known_at": ka, "filing_id": fid, "seg": {}})
+        p["seg"].setdefault(dims.removeprefix("Segment="), {})[measure[concept]] = value
+        if ka > p["known_at"]:
+            p["known_at"], p["filing_id"] = ka, fid
+    periods: dict[dt.date, dict] = {}
+    for (pe, basis), p in by_period.items():
+        cur = periods.get(pe)
+        if cur is None or (basis == "consolidated" and cur["basis"] != "consolidated"):
+            periods[pe] = p
+    out = []
+    for pe in sorted(periods, reverse=True)[:limit]:
+        p = periods[pe]
+        segs = [{"label": k, **v} for k, v in p["seg"].items()]
+        segs.sort(key=lambda s: -(s.get("revenue") or 0))
+        total = sum(s.get("revenue") or 0 for s in segs) or None
+        for s in segs:
+            s["share"] = (s["revenue"] / total) if total and s.get("revenue") is not None else None
+            unallocated = re.search(r"unallocat|eliminat|reconcil", s["label"], re.I) is not None   # a margin on a plug line says nothing
+            s["margin"] = (s["result"] / s["revenue"]) if s.get("result") is not None and s.get("revenue") and not unallocated else None
+        out.append({"period_end": pe, "basis": p["basis"], "known_at": p["known_at"], "filing_id": p["filing_id"],
+                    "total_revenue": total, "segments": segs})
+    return {"months": months, "periods": out}
+
+
+PitReader.segments = _segments  # type: ignore[attr-defined]

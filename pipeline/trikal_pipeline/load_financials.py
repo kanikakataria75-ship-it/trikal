@@ -231,3 +231,46 @@ def build_financials(con: duckdb.DuckDBPyConnection) -> int:
     n = con.execute("SELECT count(*) FROM fact_financial").fetchone()[0]
     con.execute("COMMIT")
     return n
+
+
+def relabel_dims(con: duckdb.DuckDBPyConnection, raw: RawStore, batch_docs: int = 500) -> dict[str, int]:
+    """One-off: filings loaded before the parser named segment / other-expense members. Re-reads each XBRL filing that has
+    dimensional facts and replaces only those facts (the consolidated lines are untouched)."""
+    rows = con.execute("""
+        SELECT f.filing_id, f.security_id, f.basis, f.known_at, f.known_precision, f.source_sha
+        FROM filing f
+        WHERE f.kind = 'results_xbrl'
+          AND f.filing_id IN (SELECT DISTINCT filing_id FROM fact_financial_all WHERE dims <> '')""").fetchall()
+    stage = data_dir() / "staging" / "fin"
+    stage.mkdir(parents=True, exist_ok=True)
+    stats = {"filings": len(rows), "relabelled_facts": 0, "errors": 0}
+    for i in range(0, len(rows), batch_docs):
+        part = rows[i:i + batch_docs]
+        out_path = stage / f"relabel_{dt.datetime.now():%H%M%S%f}.csv"
+        n = 0
+        with open(out_path, "w", newline="", encoding="utf-8") as fh:
+            w = csv.writer(fh)
+            w.writerow(CSV_COLS)
+            for url, security_id, basis, known_at, prec, sha in part:
+                try:
+                    p = parse_results_xbrl(raw.read(sha))
+                except Exception:
+                    stats["errors"] += 1
+                    continue
+                for f in p.facts:
+                    if not f.dims:
+                        continue
+                    w.writerow([url, security_id or "", basis, f.concept, f.dims, f.col, f.period_start or "",
+                                f.period_end, "true" if f.is_instant else "false",
+                                months_between(f.period_start, f.period_end) or "", repr(f.value), f.unit,
+                                _iso(known_at), prec, sha])
+                    n += 1
+        ids = [r[0] for r in part]
+        ph = ",".join("?" * len(ids))
+        con.execute("BEGIN")
+        con.execute(f"DELETE FROM fact_financial_all WHERE dims <> '' AND filing_id IN ({ph})", ids)
+        con.execute(f"COPY fact_financial_all FROM '{out_path.as_posix()}' (HEADER, DELIMITER ',', FORCE_NOT_NULL (dims))")
+        con.execute("COMMIT")
+        out_path.unlink()
+        stats["relabelled_facts"] += n
+    return stats

@@ -451,6 +451,20 @@ def ownership(code: str, as_of: str = AS_OF, exchange: str = "NSE"):
                    "note": "category detail before Sep-2021 and pledge history before the first snapshot are not served by the exchange"}, a)
 
 
+@app.get("/api/company/{code}/segments")
+def segments(code: str, as_of: str = AS_OF, exchange: str = "NSE", period: str = "FY"):
+    """Reportable segments (company's own labels) by year or quarter, as filed and known at as_of."""
+    if period not in ("FY", "Q"):
+        raise HTTPException(422, "period must be FY or Q")
+    a = asof(as_of)
+    with DB.reader_ctx() as r:
+        sid = _sid(r, code, a, exchange)
+        d = r.segments(sid, a, months=12 if period == "FY" else 3, limit=8)
+        return ok({"security_id": sid, "period": period, **d,
+                   "note": "segment disclosures from the exchange's XBRL results; labels are the company's own; revenue is external revenue, "
+                           "result is profit before tax and finance cost; available from about FY2019 (Ind AS XBRL)"}, a)
+
+
 @app.get("/api/company/{code}/dupont")
 def dupont(code: str, as_of: str = AS_OF, exchange: str = "NSE"):
     a = asof(as_of)

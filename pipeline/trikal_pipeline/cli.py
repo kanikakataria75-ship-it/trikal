@@ -360,6 +360,19 @@ def check_financials() -> None:
         typer.echo(f"{name:45s} checked={n:6d} ok={ok:6d} pass={'n/a' if share is None else f'{share:.1%}'}")
 
 
+@app.command("relabel-dims")
+def relabel_dims_cmd() -> None:
+    """One-off after the parser started naming segment / other-expense members: re-read the filings that have them,
+    then rebuild fact_financial. Stop the API first."""
+    from trikal_core.db import init_schema
+    from trikal_pipeline import load_financials as lf
+
+    con, raw = _connect_wait(), RawStore()
+    init_schema(con)
+    typer.echo(f"relabel: {lf.relabel_dims(con, raw)}")
+    typer.echo(f"fact_financial rows: {lf.build_financials(con):,}")
+
+
 @app.command("refresh-m2")
 def refresh_m2() -> None:
     """Parse everything downloaded so far, run the identity checks and rewrite the coverage report."""

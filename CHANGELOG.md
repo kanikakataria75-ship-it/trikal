@@ -172,3 +172,16 @@ straight into the terminal, six-group layout, F-key bar, 2D sparkline instead of
   (crash when the docking layout moves a panel) replaced by `components/three/Label.tsx` in TX/GEO.
 - Holding pattern: after the refresh, 16 quarters of category detail (MF / insurance / FPI / promoter / public, pledge) for the
   companies already downloaded; the downloader continues (detailed history, then ~39k XBRL results, each phase followed by a refresh).
+
+## Free-data upgrades instead of LLM extraction (2026-10-16)
+
+No LLM budget, so the M6 gaps are filled from what the exchange already files in structured form, and the rest is rule-based.
+- **Segments (`SEG`)**: the XBRL carries each segment's real name as a text fact in the member's context ("Oil to Chemicals (O2C)",
+  "Banking, Financial Services and Insurance"); the parser now uses it as the dimension value, so a business has the same key across filings
+  (`trikal relabel-dims` re-read the 52,921 filings that had dimensional facts: 680k facts). `PitReader.segments`, `/api/company/{code}/segments`,
+  terminal panel `SEG`: stacked revenue by year/quarter plus the latest period's revenue, share, result, margin, assets. Works for
+  Reliance, TCS, L&T, ITC, HDFC Bank and ~630 other Ind AS filers from ~FY2019. Plug lines (unallocated / eliminations) get no margin.
+- **Other-expense breakdown** members are labelled the same way (Power, Fuel and Water ...), ready for a cost-structure view.
+- **Reported coverage ratios**: `dscr` / `iscr` as the company states them (`FA` group "Ratios as reported"), ~670 companies from 2019;
+  definitions differ between companies, so they are shown as reported, never recomputed.
+- Peers endpoint cache (pinned as-of forever, NOW for 10 min). 171 tests.

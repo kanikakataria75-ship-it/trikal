@@ -34,6 +34,10 @@ META_KEYS = {
 }
 
 
+# text facts that name the member of a breakdown (see parse_results_xbrl)
+DESCRIPTION_FACTS = {"DescriptionOfReportableSegment": "Segment", "DescriptionOfOtherExpenses": "OtherExpense"}
+
+
 @dataclass
 class Fact:
     concept: str
@@ -101,6 +105,16 @@ def parse_results_xbrl(body: bytes) -> Parsed:
         if n in META_KEYS and n not in out.meta and el.text:
             out.meta[n] = el.text.strip()
 
+    # Segment and other-expense breakdowns: the member names in the context are slots ("OneReportableSegmentRevenue02Member");
+    # the real name ("Paper and Board", "Power, Fuel and Water") is a text fact in the same context. Use it as the dimension value so
+    # the same business has the same key across filings.
+    label: dict[str, str] = {}
+    for el in root:
+        kind = DESCRIPTION_FACTS.get(el.tag.split("}")[-1])
+        cref = el.attrib.get("contextRef")
+        if kind and cref in ctx and (el.text or "").strip():
+            label[cref[:-1] if cref[-1:] in ("D", "I") else cref] = f"{kind}={' '.join((el.text or '').split())}"   # the text sits on the duration context (…D), balances on the instant one (…I)
+
     fy_start = _d(out.meta.get("DateOfStartOfFinancialYear"))
     rep_end = _d(out.meta.get("DateOfEndOfReportingPeriod"))
     for el in root:
@@ -116,6 +130,7 @@ def parse_results_xbrl(body: bytes) -> Parsed:
         except ValueError:
             continue
         col, is_inst, a, b, dims = ctx[cref]
+        dims = label.get(cref[:-1] if cref[-1:] in ("D", "I") else cref, dims)
         concept = el.tag.split("}")[-1]
         if col not in ("One", "Four"):
             out.skipped_columns[col] = out.skipped_columns.get(col, 0) + 1

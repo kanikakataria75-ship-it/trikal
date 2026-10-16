@@ -81,3 +81,9 @@
 }
 .geo { display: flex; flex-direction: column; height: 100%; }
 .geo > .tx-main { flex: 1; min-height: 0; }
+
+/* SEG — segments */
+.seg { display: flex; flex-direction: column; gap: 8px; }
+.seg-chart { height: 230px; min-height: 180px; }
+.seg-tab td:first-child { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seg-tab th:not(:first-child), .seg-tab td:not(:first-child) { text-align: right; }

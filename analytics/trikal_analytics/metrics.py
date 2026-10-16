@@ -543,6 +543,8 @@ _direct("net_npa_amount", "net_npa_amount", "INR", "net non-performing assets, a
 _direct("gnpa_pct", "gross_npa_pct", "ratio", "gross NPA ratio as reported in the results filing (standalone)")
 _direct("nnpa_pct", "net_npa_pct", "ratio", "net NPA ratio as reported in the results filing (standalone)")
 _direct("cet1", "cet1_ratio", "ratio", "Common Equity Tier 1 ratio as reported in the results filing (standalone)")
+_direct("dscr_reported", "dscr_reported", "x", "debt service coverage ratio as the company reports it in the results filing (definitions differ between companies)")
+_direct("iscr_reported", "iscr_reported", "x", "interest service coverage ratio as the company reports it in the results filing")
 
 
 def _pair(c: Ctx, li: str):

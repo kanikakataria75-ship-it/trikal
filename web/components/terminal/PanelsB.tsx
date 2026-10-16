@@ -18,7 +18,7 @@ import type { PanelProps } from "./PanelsA";
 echarts.use([SankeyChart, BarChart, TooltipComponent, GridComponent, LegendComponent, CanvasRenderer]);
 
 /* ------------------------------------------------------------------ FA */
-const STATEMENTS: [string, string][] = [["income", "Income statement"], ["bank", "Bank items"], ["balance", "Balance sheet"], ["cashflow", "Cash flow"]];
+const STATEMENTS: [string, string][] = [["income", "Income statement"], ["bank", "Bank items"], ["ratio", "Ratios as reported"], ["balance", "Balance sheet"], ["cashflow", "Cash flow"]];
 const PER_SHARE = new Set(["eps_basic", "eps_diluted", "face_value"]);
 
 function CellView({ c, li, lineage }: { c?: Cell; li: string; lineage: boolean }) {
