@@ -992,3 +992,18 @@ def _concall_promises(self: PitReader, security_id: str, as_of: AsOf) -> list[di
 
 PitReader.concalls = _concalls  # type: ignore[attr-defined]
 PitReader.concall_promises = _concall_promises  # type: ignore[attr-defined]
+
+
+def _dividends(self: PitReader, security_id: str, as_of: AsOf, start: dt.date, end: dt.date) -> list[dict]:
+    """Cash dividends (per share, as announced) that went ex between start (exclusive) and end, known by as_of. The amount was read from
+    the exchange's own wording (for example 'Interim Dividend - Rs 11 Per Share'); a row without a readable amount is left out."""
+    rows = self.con.execute(
+        """SELECT DISTINCT a.ex_date, a.amount, a.subject, a.known_at FROM corp_action a
+           JOIN listing l ON l.exchange = a.exchange AND l.code = a.code AND a.ex_date BETWEEN l.valid_from AND l.valid_to
+           WHERE l.security_id = ? AND a.exchange = 'NSE' AND a.kind LIKE '%dividend%' AND a.amount IS NOT NULL AND a.amount > 0
+             AND a.ex_date > ? AND a.ex_date <= ? AND a.known_at <= ? ORDER BY a.ex_date""",
+        [security_id, start, min(end, as_of.date_ist), as_of.ts]).fetchall()
+    return [{"ex_date": d, "amount": float(a), "subject": s, "known_at": k} for d, a, s, k in rows]
+
+
+PitReader.dividends = _dividends  # type: ignore[attr-defined]

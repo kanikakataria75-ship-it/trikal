@@ -10,6 +10,7 @@ export const FUNCTIONS: Record<FnCode, { label: string; desc: string }> = {
   RV: { label: "Relative value", desc: "Peers in the same sector and playbook, same as-of" },
   WC: { label: "What changed", desc: "Metric moves and events in the last quarter" },
   OWN: { label: "Ownership", desc: "Promoter, institutions, public; pledge" },
+  CALC: { label: "Return calculator", desc: "If you had put an amount in on a date: what it became, counting splits, bonuses and (optionally) dividends" },
   CALL: { label: "Concalls", desc: "What management said it would do, judged against its own later results; tone drift across calls (rule-based, quotes shown)" },
   KAS: { label: "KASAUTI", desc: "Sector-relative score with pillars, drivers, what was left out, and the report card that audits it" },
   SEG: { label: "Segments", desc: "Reportable segments as the company files them: revenue, result, assets, mix over time" },
@@ -32,6 +33,7 @@ export type Parsed =
   | { kind: "fn"; fn: FnCode }
   | { kind: "entity"; code: string; fn: FnCode }
   | { kind: "later"; word: string; milestone: string }
+  | { kind: "compare"; codes: string[] }
   | { kind: "mode"; mode: "cinema" | "pro" }
   | { kind: "shock"; text: string }
   | { kind: "help" }
@@ -70,6 +72,10 @@ export function parse(input: string, today: string): Parsed {
     const text = input.trim().replace(/^shocks*/i, "");
     return text ? { kind: "shock", text } : { kind: "bad", why: "SHOCK CRUDE +20 · SHOCK INR 90 · SHOCK REPO +50bp · combine with &" };
   }
+  if (t[0] === "CMP" || t[0] === "COMPARE") {
+    const codes = t.slice(1, 4);
+    return codes.length >= 2 ? { kind: "compare", codes } : { kind: "bad", why: "CMP needs two or three symbols: CMP TCS INFY WIPRO" };
+  }
   if (t[0] === "MODE") {
     const m = (t[1] ?? "").startsWith("PRO") ? "pro" : (t[1] ?? "").startsWith("CIN") ? "cinema" : null;
     return m ? { kind: "mode", mode: m } : { kind: "bad", why: "MODE PRO (dense workstation) · MODE CINEMA (3D experience)" };
@@ -79,7 +85,7 @@ export function parse(input: string, today: string): Parsed {
   const fn = (t[1] ?? "DES") as FnCode;
   if (t[1] && !(t[1] in FUNCTIONS)) {
     if (t[1] in LATER) return { kind: "later", word: t[1], milestone: LATER[t[1]] };
-    return { kind: "bad", why: `Unknown function “${t[1]}”. Try DES, GP, FA, DUP, CR, RV, WC, OWN, SEG, KAS, CALL, DCF, EVT.` };
+    return { kind: "bad", why: `Unknown function “${t[1]}”. Try DES, GP, FA, DUP, CR, RV, WC, OWN, SEG, KAS, CALL, CALC, DCF, EVT.` };
   }
   return { kind: "entity", code: t[0], fn };
 }

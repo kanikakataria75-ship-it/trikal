@@ -16,7 +16,7 @@ const TIME_PRESETS: [string, string][] = [
 export default function CommandPalette() {
   const open = useT((s) => s.paletteOpen);
   const setOpen = useT((s) => s.setPalette);
-  const { code, setCode, setAsOf, say, history, pushHistory, setMode, setShock } = useT();
+  const { code, asOf, setCode, setAsOf, say, history, pushHistory, setMode, setShock } = useT();
   const [v, setV] = useState("");
   const [deb, setDeb] = useState("");
   useEffect(() => { const t = setTimeout(() => setDeb(v), 140); return () => clearTimeout(t); }, [v]);
@@ -36,6 +36,7 @@ export default function CommandPalette() {
     else if (q.kind === "mode") { setMode(q.mode); say(q.mode === "pro" ? "PRO mode: flat, dense, keyboard-first" : "CINEMA mode: the 3D experience", "info"); }
     else if (q.kind === "shock") { setShock(q.text); workspace.open("TX"); }
     else if (q.kind === "help") workspace.open("HELP");
+    else if (q.kind === "compare") { window.location.href = `/compare?codes=${q.codes.join(",")}${asOf !== "NOW" ? `&asof=${asOf}` : ""}`; return; }
     else if (q.kind === "later") say(`${q.word} arrives with ${q.milestone}`, "warn");
     else if (q.kind === "bad") { say(q.why, "warn"); return; }
     close();

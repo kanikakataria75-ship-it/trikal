@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 
 /* ---- shapes returned by the TRIKAL API (api/trikal_api) ---- */
 export type Input = { name: string; value: number; period_end: string | null; concept: string; filing_id: string; known_at: string };
@@ -157,6 +157,14 @@ export type Concalls = Envelope & { security_id: string; calls: number; promises
   tone: ToneRow[]; examples: { hedged?: string[]; evasive?: string[]; negative?: string[] } | null };
 export const useConcalls = companyHook<Concalls>("concalls");
 
+export type Returns = Envelope & { security_id: string; mode: string; buy_date: string; end_date: string; years: number; amount: number;
+  buy_price_traded: number; end_price_traded: number; shares_bought: number; shares_at_end: number; value_price_only: number; value_shares: number;
+  dividend_cash_kept: number; total_value: number; gain: number; return: number; return_price_only: number; cagr: number | null; cagr_price_only: number | null;
+  dividends_received: { date: string; per_share: number; shares: number; cash: number; subject?: string }[]; dividends_total: number; dividends_ignored: number;
+  events: { date: string; share_multiplier: number; kind?: string | null; subject?: string | null }[]; peak_value: number; max_drawdown: number;
+  curve: { date: string; value: number }[]; notes: string[] };
+export const useReturns = companyHook<Returns>("returns");
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
@@ -197,6 +205,23 @@ function companyHook<T>(kind: string, extra: Record<string, string | number | bo
       enabled: !!code,
     });
 }
+
+/* the same company endpoints for several companies at once (the compare screen); shares the cache with the single-company hooks */
+function companyQueries<T>(kind: string, extra: Record<string, string | number | boolean | undefined> = {}) {
+  return (codes: string[], asOf: string) =>
+    useQueries({
+      queries: codes.map((code) => ({
+        queryKey: ["company", kind, code, asOf, { ...extra }],
+        queryFn: () => api<T>(`/api/company/${encodeURIComponent(code)}${kind ? "/" + kind : ""}?${q(asOf, { ...extra })}`),
+        retry: false,
+      })),
+    });
+}
+export const useCompanies = companyQueries<Company>("");
+export const usePricesMany = companyQueries<Prices>("prices", { adjusted: true });
+export const useFinancialsMany = companyQueries<Financials>("financials", { period: "FY" });
+export const useKasautiMany = companyQueries<Kasauti>("kasauti");
+export const useOwnershipMany = companyQueries<Ownership>("ownership");
 
 export const useCompany = companyHook<Company>("");
 export const usePrices = companyHook<Prices>("prices");

@@ -22,6 +22,7 @@ import { GEO, TX } from "./PanelsF";
 import { SEG } from "./PanelsG";
 import { KAS } from "./PanelsH";
 import { CALL } from "./PanelsI";
+import { CALC } from "./PanelsJ";
 import "./terminal.css";
 import "./map.css";
 import "./pro.css";
@@ -29,7 +30,7 @@ import "./tx.css";
 
 type P = { pin?: string };
 const wrap = (C: React.ComponentType<{ params: P }>) => function Panel(props: IDockviewPanelProps<P>) { return <C params={props.params ?? {}} />; };
-const COMPONENTS = { DES: wrap(DES), GP: wrap(GP), FA: wrap(FA), DUP: wrap(DUP), CR: wrap(CR), RV: wrap(RV), WC: wrap(WC), OWN: wrap(OWN), SEG: wrap(SEG), KAS: wrap(KAS), CALL: wrap(CALL), DCF: wrap(DCF), EVT: wrap(EVT), MACRO: wrap(MACRO), MAP: wrap(MAP), TX: wrap(TX), GEO: wrap(GEO), HELP: wrap(HELP) };
+const COMPONENTS = { DES: wrap(DES), GP: wrap(GP), FA: wrap(FA), DUP: wrap(DUP), CR: wrap(CR), RV: wrap(RV), WC: wrap(WC), OWN: wrap(OWN), SEG: wrap(SEG), KAS: wrap(KAS), CALL: wrap(CALL), CALC: wrap(CALC), DCF: wrap(DCF), EVT: wrap(EVT), MACRO: wrap(MACRO), MAP: wrap(MAP), TX: wrap(TX), GEO: wrap(GEO), HELP: wrap(HELP) };
 const title = (fn: FnCode, pin?: string) => `${fn}  ·  ${FUNCTIONS[fn].label}${pin ? `  ·  ⌖ ${dmy(pin)}` : ""}`;
 const THEME = { name: "trikal", className: "dockview-theme-trikal", gap: 6 };
 
@@ -76,6 +77,7 @@ function proLayout(api: DockviewApi) {
   add("SEG", "KAS", "within");
   add("CALL", "KAS", "within");
   add("TX", "MACRO", "within");
+  add("CALC", "MACRO", "within");
   add("GEO", "MACRO", "within");
   for (const id of ["RV", "FA", "KAS", "MACRO", "DES"] as const) api.getPanel(id)?.api.setActive();
   const size = () => {
@@ -113,6 +115,7 @@ function defaultLayout(api: DockviewApi, mode: Mode = "cinema") {
   api.addPanel({ id: "CALL", component: "CALL", title: title("CALL"), params: {}, position: { referencePanel: "RV", direction: "within" } });
   api.addPanel({ id: "MACRO", component: "MACRO", title: title("MACRO"), params: {}, position: { referencePanel: "RV", direction: "within" } });
   api.addPanel({ id: "TX", component: "TX", title: title("TX"), params: {}, position: { referencePanel: "RV", direction: "within" } });
+  api.addPanel({ id: "CALC", component: "CALC", title: title("CALC"), params: {}, position: { referencePanel: "RV", direction: "within" } });
   api.addPanel({ id: "GEO", component: "GEO", title: title("GEO"), params: {}, position: { referencePanel: "RV", direction: "within" } });
   api.getPanel("DUP")?.api.setActive();
   api.getPanel("FA")?.api.setActive();

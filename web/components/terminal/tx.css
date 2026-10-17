@@ -133,3 +133,21 @@
 .cd-hint { font-size: 10.5px; color: var(--fg-2); margin-left: 6px; text-shadow: 0 1px 4px #000; }
 .cd-layer { position: absolute; inset: 0; z-index: 5; }
 .cd-t { font-family: var(--font-mono); font-size: 10.5px; paint-order: stroke; stroke: rgba(6, 7, 9, 0.85); stroke-width: 3px; }
+
+/* CALC — return calculator */
+.calc { display: flex; flex-direction: column; gap: 10px; }
+.calc-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px; }
+.calc-form label { display: flex; flex-direction: column; gap: 3px; font-size: 10.5px; color: var(--fg-2); }
+.calc-form input { background: var(--bg-0); border: 1px solid var(--line-strong); color: var(--fg-0); padding: 5px 8px; font-size: 12.5px; font-family: var(--font-mono); outline: none; min-width: 120px; }
+.calc-form input:focus { border-color: var(--gold-2); }
+.calc-quick { display: flex; gap: 4px; }
+.calc-quick button { background: none; border: 1px solid var(--line-strong); color: var(--fg-1); font-size: 11px; padding: 4px 9px; cursor: pointer; }
+.calc-quick button:hover { border-color: var(--gold-2); color: var(--gold-0); }
+.calc-hero { display: flex; flex-wrap: wrap; gap: 18px 36px; align-items: center; padding: 8px 0; }
+.calc-val { display: block; font-size: 40px; line-height: 1.1; font-weight: 500; }
+.calc-kpis { display: grid; grid-template-columns: repeat(2, minmax(130px, auto)); gap: 8px 26px; }
+.calc-kpis div { display: flex; flex-direction: column; } .calc-kpis b { font-size: 17px; font-weight: 500; }
+.calc-tab td:first-child { width: 190px; color: var(--fg-2); }
+.calc-chart { height: 220px; }
+.calc-ev { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.calc-chip { border: 1px solid var(--line-strong); padding: 1px 8px; font-size: 11px; color: var(--fg-1); }

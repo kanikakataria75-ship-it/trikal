@@ -531,6 +531,31 @@ def concalls(code: str, as_of: str = AS_OF, exchange: str = "NSE"):
                            "the as-of date; tone is a word-list count, not a model's reading"}, a)
 
 
+@app.get("/api/company/{code}/returns")
+def returns(code: str, as_of: str = AS_OF, start: dt.date = Query(...), amount: float = 100000, dividends: str = "cash", exchange: str = "NSE"):
+    """What `amount` rupees put in on `start` would be worth at as_of (the end date), with the share-count changes of splits and bonuses and,
+    optionally, dividends (cash kept, or reinvested). Uses only prices, adjustments and dividend announcements known at as_of."""
+    from trikal_analytics import returns as RT
+
+    a = asof(as_of)
+    with DB.reader_ctx() as r:
+        sid = _sid(r, code, a, exchange)
+        bars = [RT.Bar(b.trade_date, b.close, b.factor or 1.0) for b in r.prices(sid, a, exchange, start=start - dt.timedelta(days=15)) if b.close]
+        divs = r.dividends(sid, a, start, a.date_ist)
+        try:
+            out = RT.simulate(bars, divs, start, a.date_ist, amount, dividends)
+        except RT.ReturnError as e:
+            raise HTTPException(422, str(e)) from e
+        labels = {ev[0]: (ev[5], ev[6]) for ev in r.adjustment_events(sid, a, exchange) if ev[4]}
+        for e in out["events"]:
+            kind, subject = labels.get(e["date"], (None, None))
+            e["kind"], e["subject"] = kind, subject
+        out["notes"] = ["buy at the close of the first session on or after the start date; value at the close of the last session on or before the end date",
+                        "splits and bonuses change the number of shares, not the value; only adjustments confirmed by announcement and price move are applied",
+                        "dividends: read from the exchange's announcements; cash is not given interest; no tax, brokerage or charges are deducted"]
+        return ok({"security_id": sid, **out}, a)
+
+
 @app.get("/api/company/{code}/dupont")
 def dupont(code: str, as_of: str = AS_OF, exchange: str = "NSE"):
     a = asof(as_of)
