@@ -6,4 +6,4 @@ for %%p in (8000 3000) do (
   for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":%%p " ^| findstr LISTENING') do taskkill /PID %%a /T /F >nul 2>&1
 )
 echo   stopped.
-%SystemRoot%\System32	imeout.exe /t 3 >nul
+%SystemRoot%\System32\timeout.exe /t 3 >nul

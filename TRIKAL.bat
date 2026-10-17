@@ -32,7 +32,7 @@ echo   waiting for the terminal to be ready ^(the first start takes up to a minu
 for /l %%i in (1,1,90) do (
   call :up 3000 web
   if not errorlevel 1 goto ready
-  %SystemRoot%\System32	imeout.exe /t 2 /nobreak >nul
+  %SystemRoot%\System32\timeout.exe /t 2 /nobreak >nul
 )
 echo   the terminal did not start in time. Look at the "TRIKAL WEB" window for the error.
 pause
@@ -44,7 +44,7 @@ start "" "http://localhost:3000/terminal"
 echo.
 echo   Done. This window can be closed; the terminal keeps running.
 echo   To stop everything: run STOP_TRIKAL.bat
-%SystemRoot%\System32	imeout.exe /t 6 >nul
+%SystemRoot%\System32\timeout.exe /t 6 >nul
 exit /b 0
 
 :up

@@ -9,7 +9,7 @@ echo   NEVER included: your .env (broker keys), .git, .venv, node_modules, raw d
 echo.
 echo   Stopping the terminal first so the database file is complete ...
 call "%~dp0STOP_TRIKAL.bat" >nul 2>nul
-%SystemRoot%\System32	imeout.exe /t 3 /nobreak >nul
+%SystemRoot%\System32\timeout.exe /t 3 /nobreak >nul
 tasklist /fi "imagename eq python.exe" /nh | find /i "python.exe" >nul && (
   echo   A Python job is still running ^(a download or a build^). Wait for it to finish, then run this again.
   pause
