@@ -683,6 +683,43 @@ def kasauti_score(code: str, as_of: str = AS_OF, exchange: str = "NSE"):
                    "note": "a research ranking among sector peers, not a rating, target price or advice"}, a)
 
 
+@app.get("/api/company/{code}/kasauti/history")
+def kasauti_history(code: str, as_of: str = AS_OF, exchange: str = "NSE"):
+    """The company's stored KASAUTI score at every scoring date up to as_of, with the price on those dates."""
+    from trikal_api import cards
+
+    a = asof(as_of)
+    with DB.reader_ctx() as r:
+        sid = _sid(r, code, a, exchange)
+        return ok({"security_id": sid, **cards.score_history(r, sid, a)}, a)
+
+
+@app.get("/api/company/{code}/results-card")
+def results_card(code: str, as_of: str = AS_OF, exchange: str = "NSE"):
+    """The latest results against the quarter before and the year before, what else moved with them, and what management had said about the year."""
+    from trikal_analytics import promises as PR
+    from trikal_api import cards
+
+    a = asof(as_of)
+    with DB.reader_ctx() as r:
+        sid = _sid(r, code, a, exchange)
+        eng = M.Engine(r)
+        judged = [{**p, **PR.judge(eng, sid, p, a)} for p in PR.dedupe(r.concall_promises(sid, a))]
+        return ok({"security_id": sid, **cards.results_card(r, sid, a, judged)}, a)
+
+
+@app.get("/api/heatmap")
+def heatmap(as_of: str = AS_OF):
+    """Every scored company with its six pillar scores, to be grouped by sector playbook on screen."""
+    a = asof(as_of)
+    with DB.reader_ctx() as r:
+        day, rows = _screen_rows(r, a)
+        out = [{"code": x["code"], "name": x["name"], "sector": x["sector"], "playbook": x["playbook"], "peer_group": x["peer_group"], "score": x["score"],
+                "confidence": x["confidence"], **{p: x.get(p) for p in PILLARS}} for x in rows if x.get("code")]
+        return ok({"scoring_date": day, "universe": len(out), "rows": out,
+                   "note": "pillar scores are percentiles among sector peers (0-100); a blank cell means the pillar was left out for lack of data"}, a)
+
+
 @app.get("/api/company/{code}/concalls")
 def concalls(code: str, as_of: str = AS_OF, exchange: str = "NSE"):
     """Earnings-call statements with a number, judged against the company's own later results as of `as_of`, plus word-list tone drift.

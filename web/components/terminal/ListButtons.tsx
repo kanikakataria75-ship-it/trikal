@@ -3,7 +3,7 @@
 /* The star and bell next to a company's name: add it to the watchlist, or set a price alert. Both lists live in this browser. */
 
 import { useEffect, useRef, useState } from "react";
-import { newId, usePriceAlerts, useWatch } from "@/lib/lists";
+import { newId, useNotes, usePriceAlerts, useWatch } from "@/lib/lists";
 import { workspace } from "@/lib/store";
 
 export function WatchButton({ code }: { code: string }) {
@@ -54,5 +54,14 @@ export function AlertButton({ code, price }: { code: string; price: number | nul
         </div>
       )}
     </span>
+  );
+}
+
+export function NoteButton({ code }: { code: string }) {
+  const [notes] = useNotes();
+  const has = !!notes[code]?.text;
+  return (
+    <button className={`des-pdf des-star ${has ? "on" : ""}`} title={has ? "You have a note on this company: open it" : "Write a note on this company (kept in this browser)"}
+      onClick={() => workspace.open("NOTE")}>{has ? "📝 Noted" : "📝 Note"}</button>
   );
 }

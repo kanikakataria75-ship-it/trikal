@@ -71,3 +71,23 @@ export function useAlertFeed() {
   ];
   return { q, items, hits, server, all, count: all.length, codes };
 }
+
+/* ───────────── notes: a few lines and tags per company, kept in this browser ───────────── */
+const NKEY = "trikal.notes.v1";
+export type Note = { text: string; tags: string[]; created: string; updated: string; price: number | null; price_date: string | null };
+
+export function useNotes(): [Record<string, Note>, (code: string, patch: Partial<Note> | null) => void] {
+  const s = useSyncExternalStore(subscribe, () => raw(NKEY), () => "");
+  const all = useMemo(() => parse<Record<string, Note>>(s, {}), [s]);
+  const set = useCallback((code: string, patch: Partial<Note> | null) => {
+    const cur = parse<Record<string, Note>>(raw(NKEY), {});
+    if (patch === null) delete cur[code];
+    else {
+      const now = new Date().toISOString();
+      const base: Note = { text: "", tags: [], created: now, updated: now, price: null, price_date: null };
+      cur[code] = { ...base, ...cur[code], ...patch, updated: now };
+    }
+    put(NKEY, cur);
+  }, []);
+  return [all, set];
+}

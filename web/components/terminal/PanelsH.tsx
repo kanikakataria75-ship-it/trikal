@@ -14,6 +14,7 @@ import { dmy } from "@/lib/format";
 import { useT } from "@/lib/store";
 import { PanelState, Seg, usePanelAsOf } from "./common";
 import type { PanelProps } from "./PanelsA";
+import { ScoreHistory } from "./PanelsN";
 
 echarts.use([BarChart, GridComponent, TooltipComponent, CanvasRenderer]);
 
@@ -77,6 +78,7 @@ export function KAS({ params }: PanelProps) {
                   {d!.status !== "ok" && <div className="neg">{d!.status}</div>}
                 </div>
               </div>
+              <ScoreHistory code={code} asOf={asOf} />
               {det && (
                 <div className="kas-grid">
                   <div>

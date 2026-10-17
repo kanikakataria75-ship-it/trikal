@@ -244,3 +244,18 @@ export async function runValuation(code: string, asOf: string, method: string, a
     { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ method, assumptions }) },
   );
 }
+
+/* ───────── score history, results card, heatmap ───────── */
+export type KasHistory = Envelope & { available: boolean; reason?: string; note?: string;
+  points: { date: string; score: number; confidence: number | null; peer_group: string; n_peers: number; pillars: Record<string, number | null>; reconstructed: boolean; price: number | null }[] };
+export const useKasHistory = companyHook<KasHistory>("kasauti/history");
+export type CardRow = { label: string; kind: "money" | "ratio"; now: number | null; prev: number | null; yago: number | null; qoq: number | null; yoy: number | null };
+export type ResultsCard = Envelope & { available: boolean; reason?: string; period_end: string; prev_end: string | null; yago_end: string | null; known_at: string; note: string;
+  rows: CardRow[]; holding: { label: string; now: number; prev: number; delta: number }[]; holding_periods: string[] | null;
+  score: { date: string; score: number | null }[]; pillar_moves: { pillar: string; now: number; prev: number; delta: number }[];
+  said: { call_period_end: string; quote: string; metric: string; verdict: string; actual: number | null; low: number | null; high: number | null; op: string; why: string | null }[]; said_fy: string | null;
+  reaction: { base_date: string; day1: number | null; day5: number | null } | null };
+export const useResultsCard = companyHook<ResultsCard>("results-card");
+export type HeatRow = { code: string; name: string; sector: string | null; playbook: string; peer_group: string; score: number; confidence: number | null } & Record<string, number | string | null>;
+export type Heatmap = Envelope & { scoring_date: string; universe: number; rows: HeatRow[]; note: string };
+export const useHeatmap = (asOf: string) => useQuery({ queryKey: ["heatmap", asOf], queryFn: () => api<Heatmap>(`/api/heatmap?${q(asOf)}`), staleTime: 600_000, retry: false });

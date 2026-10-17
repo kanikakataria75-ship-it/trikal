@@ -29,3 +29,41 @@
 .wl-lv { border: 1px solid var(--line-strong); padding: 1px 4px 1px 8px; font-size: 11.5px; color: var(--fg-1); }
 .wl-lv.hit { border-color: var(--pos); color: var(--pos); }
 .wl-lv i { font-style: normal; cursor: pointer; padding: 0 5px; color: var(--fg-2); }
+
+/* score history, results card, heatmap, notes */
+.kas-hist-chart { width: 100%; height: 190px; }
+.kas-hist-none { font-size: 11.5px; }
+.res-head { display: flex; gap: 12px; align-items: baseline; font-size: 13px; }
+.res-react { font-size: 12px; padding: 6px 8px; border-left: 2px solid var(--gold-2); background: rgba(212, 175, 55, 0.05); margin: 6px 0; }
+.res-tab th, .res-tab td { white-space: nowrap; }
+.res-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; margin-top: 10px; }
+@media (max-width: 760px) { .res-cols { grid-template-columns: 1fr; } }
+.res-said td { vertical-align: top; font-size: 12px; }
+.res-v { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; padding: 0 6px; border: 1px solid var(--line-strong); }
+.res-v.delivered { color: var(--pos); border-color: var(--pos); } .res-v.missed { color: var(--neg); border-color: var(--neg); } .res-v.partially { color: var(--warn); border-color: var(--warn); }
+.heat-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 8px; font-size: 12px; }
+.heat-bar select { background: var(--bg-0); border: 1px solid var(--line-strong); color: var(--fg-0); padding: 4px 8px; font-size: 12px; text-transform: capitalize; }
+.heat-key { display: flex; margin-left: auto; font-style: normal; }
+.heat-key b { font-weight: 400; font-size: 10px; padding: 2px 9px; color: var(--fg-1); }
+.heat-tab th { cursor: pointer; user-select: none; } .heat-tab th.on { color: var(--gold-0); }
+.heat-tab tr { cursor: pointer; } .heat-tab tr.me td:first-child { box-shadow: inset 2px 0 var(--gold-1); }
+.heat-c { text-align: center; min-width: 58px; }
+.heat-med td { border-top: 1px solid var(--line-strong); color: var(--fg-2); }
+.note { display: flex; flex-direction: column; gap: 8px; }
+.note textarea { width: 100%; min-height: 150px; resize: vertical; background: var(--bg-0); border: 1px solid var(--line-strong); color: var(--fg-0); font: 13px/1.5 inherit; padding: 8px 10px; }
+.note textarea:focus { outline: none; border-color: var(--gold-2); }
+.note-tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.note-tags input, .note-bar input { background: var(--bg-0); border: 1px solid var(--line-strong); color: var(--fg-0); padding: 3px 8px; font-size: 12px; }
+.note-tag { border: 1px solid var(--gold-2); color: var(--gold-0); font-size: 11px; padding: 1px 4px 1px 8px; }
+.note-tag.small { padding: 0 6px; font-size: 10px; margin-right: 4px; }
+.note-tag i { font-style: normal; cursor: pointer; padding: 0 5px; color: var(--fg-2); }
+.note-sug { display: flex; flex-wrap: wrap; gap: 6px; }
+.note-sug button, .note-bar button { background: none; border: 1px solid var(--line-strong); color: var(--fg-2); font-size: 11px; padding: 2px 8px; cursor: pointer; }
+.note-sug button:hover, .note-bar button:hover { color: var(--gold-0); border-color: var(--gold-2); }
+.note-sug .danger:hover { color: var(--neg); border-color: var(--neg); }
+.note-all { margin-top: 6px; border-top: 1px solid var(--line); padding-top: 8px; }
+.note-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 6px; }
+.note-bar input { flex: 1; }
+.note-item { padding: 6px 8px; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 12px; }
+.note-item:hover, .note-item.me { background: rgba(212, 175, 55, 0.07); }
+.res { max-width: 1000px; }

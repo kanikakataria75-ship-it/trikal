@@ -11,6 +11,9 @@ export const FUNCTIONS: Record<FnCode, { label: string; desc: string }> = {
   WC: { label: "What changed", desc: "Metric moves and events in the last quarter" },
   OWN: { label: "Ownership", desc: "Promoter, institutions, public; pledge" },
   CAL: { label: "Calendar", desc: "Upcoming board meetings: results, dividends, fund raising; each with when it was announced" },
+  RES: { label: "Results card", desc: "Latest results against the quarter and the year before, what moved with them (holding, score, price) and what management had said" },
+  HEAT: { label: "Sector heatmap", desc: "A sector's companies as a grid of KASAUTI pillar scores; sort, spot the odd one out" },
+  NOTE: { label: "Notes", desc: "Your own notes and tags per company, with the price when you first noted it (kept in this browser)" },
   WL: { label: "Watchlist", desc: "Your watched companies with alerts: new results, score moves, big price moves, ex-dates (kept in this browser)" },
   PORT: { label: "Portfolio", desc: "Value your holdings: P&L, weights, sector mix, KASAUTI score of the book (kept in this browser)" },
   SCRN: { label: "Screener", desc: "Find companies by a condition (roce > 20% and pe < 25 ...) over the KASAUTI panel, as of any scoring date" },
@@ -65,7 +68,7 @@ export function resolveAsOf(v: string, today: string): string | null {
 }
 
 export function parse(input: string, today: string): Parsed {
-  const t = input.trim().toUpperCase().split(/\s+/).filter(Boolean).map((w, i) => (w === "CC" || w === "CONCALL" ? "CALL" : w === "KASAUTI" ? "KAS" : w === "SEGMENTS" ? "SEG" : w));
+  const t = input.trim().toUpperCase().split(/\s+/).filter(Boolean).map((w, i) => (w === "CC" || w === "CONCALL" ? "CALL" : w === "KASAUTI" ? "KAS" : w === "SEGMENTS" ? "SEG" : w === "RESULTS" ? "RES" : w === "HEATMAP" ? "HEAT" : w === "NOTES" ? "NOTE" : w));
   if (!t.length) return { kind: "empty" };
   if (t[0] === "?" || t[0] === "HELP") return { kind: "help" };
   if (t[0] === "ASOF") {
@@ -91,7 +94,7 @@ export function parse(input: string, today: string): Parsed {
   const fn = (t[1] ?? "DES") as FnCode;
   if (t[1] && !(t[1] in FUNCTIONS)) {
     if (t[1] in LATER) return { kind: "later", word: t[1], milestone: LATER[t[1]] };
-    return { kind: "bad", why: `Unknown function “${t[1]}”. Try DES, GP, FA, DUP, CR, RV, WC, OWN, SEG, KAS, CALL, CALC, SCRN, WL, PORT, CAL, DCF, EVT.` };
+    return { kind: "bad", why: `Unknown function “${t[1]}”. Try DES, GP, FA, DUP, CR, RV, WC, OWN, SEG, KAS, CALL, CALC, SCRN, WL, PORT, CAL, RES, HEAT, NOTE, DCF, EVT.` };
   }
   return { kind: "entity", code: t[0], fn };
 }

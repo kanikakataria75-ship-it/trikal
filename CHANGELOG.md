@@ -233,3 +233,9 @@ No LLM budget, so the M6 gaps are filled from what the exchange already files in
 - PDF report (`/api/company/{code}/report.pdf`, `RPT`, button in DES). 231 tests.
 - Header buttons for Screener, Calculator, Watchlist (red badge = live alerts), Portfolio, Calendar, Compare, Report and a "More" menu of every function; narrower screens fold the extra ones into More.
 - Company header: ☆ Watch / ★ Watching toggle and 🔔 Alert (price above or below a level, checked against the latest close) beside PDF report and Compare. Price alerts are kept in this browser and listed in WL.
+
+## Score history, results card, sector heatmap, notes (2026-10-17)
+- KAS: score history chart (`/api/company/{code}/kasauti/history`): the stored score at every scoring date next to the adjusted price.
+- `RES` results card (`/api/company/{code}/results-card`): latest quarter vs previous quarter and year-ago quarter, holding changes, KASAUTI pillar moves, price after the announcement, judged management statements for the latest year. Missing figures are blank, never estimated.
+- `HEAT` sector heatmap (`/api/heatmap`): pillar scores of a playbook group as a sortable colour grid.
+- `NOTE` notes with tags and the price when first written, searchable, downloadable (browser only); Note button in the DES header. 234 tests.

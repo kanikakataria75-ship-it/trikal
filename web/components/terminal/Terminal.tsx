@@ -27,6 +27,7 @@ import { CALC } from "./PanelsJ";
 import { SCRN } from "./PanelsK";
 import { PORT, WL } from "./PanelsL";
 import { CAL } from "./PanelsM";
+import { HEAT, NOTE, RES } from "./PanelsN";
 import "./terminal.css";
 import "./map.css";
 import "./pro.css";
@@ -35,7 +36,7 @@ import "./tools.css";
 
 type P = { pin?: string };
 const wrap = (C: React.ComponentType<{ params: P }>) => function Panel(props: IDockviewPanelProps<P>) { return <C params={props.params ?? {}} />; };
-const COMPONENTS = { DES: wrap(DES), GP: wrap(GP), FA: wrap(FA), DUP: wrap(DUP), CR: wrap(CR), RV: wrap(RV), WC: wrap(WC), OWN: wrap(OWN), SEG: wrap(SEG), KAS: wrap(KAS), CALL: wrap(CALL), CALC: wrap(CALC), SCRN: wrap(SCRN), WL: wrap(WL), PORT: wrap(PORT), CAL: wrap(CAL), DCF: wrap(DCF), EVT: wrap(EVT), MACRO: wrap(MACRO), MAP: wrap(MAP), TX: wrap(TX), GEO: wrap(GEO), HELP: wrap(HELP) };
+const COMPONENTS = { DES: wrap(DES), GP: wrap(GP), FA: wrap(FA), DUP: wrap(DUP), CR: wrap(CR), RV: wrap(RV), WC: wrap(WC), OWN: wrap(OWN), SEG: wrap(SEG), KAS: wrap(KAS), CALL: wrap(CALL), CALC: wrap(CALC), SCRN: wrap(SCRN), WL: wrap(WL), PORT: wrap(PORT), CAL: wrap(CAL), RES: wrap(RES), HEAT: wrap(HEAT), NOTE: wrap(NOTE), DCF: wrap(DCF), EVT: wrap(EVT), MACRO: wrap(MACRO), MAP: wrap(MAP), TX: wrap(TX), GEO: wrap(GEO), HELP: wrap(HELP) };
 const title = (fn: FnCode, pin?: string) => `${fn}  ·  ${FUNCTIONS[fn].label}${pin ? `  ·  ⌖ ${dmy(pin)}` : ""}`;
 const THEME = { name: "trikal", className: "dockview-theme-trikal", gap: 6 };
 
@@ -87,6 +88,9 @@ function proLayout(api: DockviewApi) {
   add("WL", "MACRO", "within");
   add("PORT", "MACRO", "within");
   add("CAL", "MACRO", "within");
+  add("HEAT", "MACRO", "within");
+  add("NOTE", "MACRO", "within");
+  add("RES", "KAS", "within");
   add("GEO", "MACRO", "within");
   for (const id of ["RV", "FA", "KAS", "MACRO", "DES"] as const) api.getPanel(id)?.api.setActive();
   const size = () => {
@@ -129,6 +133,9 @@ function defaultLayout(api: DockviewApi, mode: Mode = "cinema") {
   api.addPanel({ id: "WL", component: "WL", title: title("WL"), params: {}, position: { referencePanel: "RV", direction: "within" } });
   api.addPanel({ id: "PORT", component: "PORT", title: title("PORT"), params: {}, position: { referencePanel: "RV", direction: "within" } });
   api.addPanel({ id: "CAL", component: "CAL", title: title("CAL"), params: {}, position: { referencePanel: "RV", direction: "within" } });
+  api.addPanel({ id: "RES", component: "RES", title: title("RES"), params: {}, position: { referencePanel: "RV", direction: "within" } });
+  api.addPanel({ id: "HEAT", component: "HEAT", title: title("HEAT"), params: {}, position: { referencePanel: "RV", direction: "within" } });
+  api.addPanel({ id: "NOTE", component: "NOTE", title: title("NOTE"), params: {}, position: { referencePanel: "RV", direction: "within" } });
   api.addPanel({ id: "GEO", component: "GEO", title: title("GEO"), params: {}, position: { referencePanel: "RV", direction: "within" } });
   api.getPanel("DUP")?.api.setActive();
   api.getPanel("FA")?.api.setActive();
@@ -271,7 +278,7 @@ export default function Terminal() {
     const panel = ex ?? api.addPanel({ id: fn, component: fn, title: title(fn, opts?.pin), params: { pin: opts?.pin }, ...(ref ? { position: { referencePanel: ref.id, direction: "within" as const } } : {}) });
     panel.api.setActive();
     // the transmission and exposure desks need room: they open full-window (Esc, or open any other function, to go back)
-    if (fn === "TX" || fn === "GEO" || fn === "SCRN" || fn === "PORT" || fn === "CAL") setTimeout(() => { try { api.maximizeGroup(panel); } catch { /* sizing only */ } }, 60);
+    if (fn === "TX" || fn === "GEO" || fn === "SCRN" || fn === "PORT" || fn === "CAL" || fn === "HEAT" || fn === "RES") setTimeout(() => { try { api.maximizeGroup(panel); } catch { /* sizing only */ } }, 60);
   }, []);
 
   useEffect(() => {
