@@ -9,6 +9,7 @@ metric_groups:
                           interest_coverage_ebitda]
   working_capital: [inventory_days, receivable_days, payable_days, cash_conversion_cycle]
   distress_nonfinancial: [altman_z]
+  cash_quality_nonfinancial: [cfo_to_profit, accruals_ratio, other_income_share]
   earnings_multiple: [pe]
 
 method_groups:

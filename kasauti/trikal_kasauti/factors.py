@@ -8,7 +8,7 @@ import datetime as dt
 from trikal_core.pit import PitReader
 from trikal_core.timeutil import AsOf
 
-FACTOR_METRICS = ("promoter_change_4q", "institution_change_4q", "pledge_pct", "momentum_12_1", "momentum_6")
+FACTOR_METRICS = ("promoter_change_4q", "institution_change_4q", "pledge_pct", "momentum_12_1", "momentum_6", "promise_kept")
 STALE_PRICE_DAYS = 10
 MAX_PLAUSIBLE_HOLDING_SWING = 12.0       # percentage points in about a year
 

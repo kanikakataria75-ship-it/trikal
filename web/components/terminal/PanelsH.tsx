@@ -18,11 +18,11 @@ import { ScoreHistory } from "./PanelsN";
 
 echarts.use([BarChart, GridComponent, TooltipComponent, CanvasRenderer]);
 
-const PILLAR = { quality: "Quality", growth: "Growth", valuation: "Valuation", balance: "Balance sheet", ownership: "Ownership flow", momentum: "Momentum" } as Record<string, string>;
+const PILLAR = { quality: "Quality", growth: "Growth", valuation: "Valuation", balance: "Balance sheet", ownership: "Ownership flow", momentum: "Momentum", earnings_quality: "Earnings quality", credibility: "Mgmt credibility" } as Record<string, string>;
 const METRIC = { roce: "ROCE", roe: "ROE", roa: "ROA", ebitda_margin: "EBITDA margin", net_margin: "Net margin", revenue_growth: "Revenue growth", profit_growth: "Profit growth",
   ev_ebitda: "EV/EBITDA", pe: "P/E", pb: "P/B", fcf_yield: "FCF yield", net_debt_ebitda: "Net debt/EBITDA", debt_to_equity: "Debt/equity", interest_coverage: "Interest cover",
   altman_z: "Altman Z", promoter_change_4q: "Promoter Δ 1y", institution_change_4q: "Institutions Δ 1y", pledge_pct: "Pledge %", momentum_12_1: "Momentum 12-1m", momentum_6: "Momentum 6m",
-  cost_to_income: "Cost/income", gnpa_pct: "Gross NPA", nnpa_pct: "Net NPA", cet1: "CET1", credit_cost: "Credit cost", leverage_assets_to_equity: "Assets/equity" } as Record<string, string>;
+  cost_to_income: "Cost/income", cfo_to_profit: "Cash flow / profit", accruals_ratio: "Accruals / assets", other_income_share: "Other income / PBT", promise_kept: "Promises kept", gnpa_pct: "Gross NPA", nnpa_pct: "Net NPA", cet1: "CET1", credit_cost: "Credit cost", leverage_assets_to_equity: "Assets/equity" } as Record<string, string>;
 const pctFmt = (x: number | null | undefined, d = 1) => (x === null || x === undefined ? "n/a" : `${x >= 0 ? "+" : "−"}${Math.abs(x * 100).toFixed(d)}%`);
 const num = (x: number | null | undefined) => (x === null || x === undefined ? "n/a" : Math.abs(x) >= 100 ? x.toFixed(0) : Math.abs(x) >= 10 ? x.toFixed(1) : x.toFixed(2));
 const tone = (p: number | null | undefined) => (p === null || p === undefined ? "" : p >= 0.66 ? "pos" : p <= 0.33 ? "neg" : "");
@@ -54,8 +54,9 @@ function Deciles({ h }: { h: KasHorizon }) {
 export function KAS({ params }: PanelProps) {
   const code = useT((s) => s.code);
   const asOf = usePanelAsOf(params.pin);
-  const q = useKasauti(code, asOf);
-  const rep = useKasautiReport(asOf);
+  const [ver, setVer] = useState(1);
+  const q = useKasauti(code, asOf, { version: ver });
+  const rep = useKasautiReport(asOf, ver);
   const [hz, setHz] = useState("3");
   const d = q.data;
   const det = d?.detail;
@@ -63,6 +64,8 @@ export function KAS({ params }: PanelProps) {
   const h = horizons[hz];
   return (
     <div className="t-panel kas">
+      <div className="kas-ver"><Seg value={String(ver)} onChange={(v) => setVer(Number(v))} options={[{ v: "1", l: "v1 · frozen" }, { v: "2", l: "v2 · draft" }]} />
+        {ver === 2 && <span className="t-dim">adds earnings quality and management credibility; v1 stays the frozen reference</span>}</div>
       <PanelState q={q}>
         {() => (
           !d!.available ? <div className="t-empty"><b>Not scored</b><span>{d!.reason}</span></div> : (
@@ -78,7 +81,7 @@ export function KAS({ params }: PanelProps) {
                   {d!.status !== "ok" && <div className="neg">{d!.status}</div>}
                 </div>
               </div>
-              <ScoreHistory code={code} asOf={asOf} />
+              <ScoreHistory code={code} asOf={asOf} version={ver} />
               {det && (
                 <div className="kas-grid">
                   <div>

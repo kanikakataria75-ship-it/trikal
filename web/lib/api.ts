@@ -146,7 +146,7 @@ export type KasReport = Envelope & { available: boolean; reason?: string; frozen
   report?: { label: string; data_end: string; dates: string[]; horizons: Record<string, KasHorizon>; conventions: Record<string, string | number>;
     portfolio: { periods: number; years?: number; cagr_net?: number; cagr_benchmark?: number; max_drawdown?: number; max_drawdown_benchmark?: number; avg_turnover?: number; cost_per_side?: number } } };
 export const useKasauti = companyHook<Kasauti>("kasauti");
-export const useKasautiReport = (asOf: string) => useQuery({ queryKey: ["kasauti-report", asOf], queryFn: () => api<KasReport>(`/api/kasauti/report?${q(asOf)}`), staleTime: Infinity });
+export const useKasautiReport = (asOf: string, version = 1) => useQuery({ queryKey: ["kasauti-report", asOf, version], queryFn: () => api<KasReport>(`/api/kasauti/report?${q(asOf, { version })}`), staleTime: Infinity });
 
 export type CallPromise = { source_url: string; announced_at: string; call_period_end: string; metric: string; op: string; low: number; high: number;
   horizon_end: string | null; horizon_kind: string; quote: string; page: number; verdict: string; why: string | null; actual: number | null };
@@ -258,4 +258,4 @@ export type ResultsCard = Envelope & { available: boolean; reason?: string; peri
 export const useResultsCard = companyHook<ResultsCard>("results-card");
 export type HeatRow = { code: string; name: string; sector: string | null; playbook: string; peer_group: string; score: number; confidence: number | null } & Record<string, number | string | null>;
 export type Heatmap = Envelope & { scoring_date: string; universe: number; rows: HeatRow[]; note: string };
-export const useHeatmap = (asOf: string) => useQuery({ queryKey: ["heatmap", asOf], queryFn: () => api<Heatmap>(`/api/heatmap?${q(asOf)}`), staleTime: 600_000, retry: false });
+export const useHeatmap = (asOf: string, version = 1) => useQuery({ queryKey: ["heatmap", asOf, version], queryFn: () => api<Heatmap>(`/api/heatmap?${q(asOf, { version })}`), staleTime: 600_000, retry: false });

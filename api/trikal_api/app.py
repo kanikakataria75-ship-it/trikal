@@ -467,24 +467,24 @@ def segments(code: str, as_of: str = AS_OF, exchange: str = "NSE", period: str =
 
 
 _SCREEN_CACHE: dict[tuple, tuple[float, dict]] = {}
-PILLARS = ("quality", "growth", "valuation", "balance", "ownership", "momentum")
+PILLARS = ("quality", "growth", "valuation", "balance", "ownership", "momentum", "earnings_quality", "credibility")
 TEXT_FIELDS = {"code": "NSE symbol", "name": "company name", "sector": "sector label", "playbook": "sector playbook", "peer_group": "peer group used for the percentiles"}
 NUM_FIELDS = {"score": "KASAUTI score 0-100", "confidence": "KASAUTI data confidence 0-1",
               **{p: f"{p} pillar score 0-100" for p in PILLARS}}
 
 
-def _screen_rows(r: PitReader, a: AsOf) -> tuple[dt.date, list[dict]]:
-    days = [d for d in r.kasauti_dates(1) if d <= a.date_ist]
+def _screen_rows(r: PitReader, a: AsOf, version: int = 1) -> tuple[dt.date, list[dict]]:
+    days = [d for d in r.kasauti_dates(version) if d <= a.date_ist]
     if not days:
         raise HTTPException(409, "the screener needs KASAUTI scores (quarterly from 2023); none exist on or before this date")
     day = days[-1]
-    hit = _SCREEN_CACHE.get(("rows", day))
+    hit = _SCREEN_CACHE.get(("rows", version, day))
     if hit and time.time() - hit[0] < 900:
         return day, hit[1]["rows"]
     end = AsOf.end_of(day)
     syms = {m[0]: m[1] for m in r.index_members("NIFTY500", end)}
     rows = []
-    for s in r.kasauti_scores(1, day):
+    for s in r.kasauti_scores(version, day):
         if s["score"] is None or not s["detail"]:
             continue
         sid, det = s["security_id"], s["detail"]
@@ -497,28 +497,28 @@ def _screen_rows(r: PitReader, a: AsOf) -> tuple[dt.date, list[dict]]:
                 row[m] = v["value"]
                 row[f"p_{m}"] = None if v["percentile"] is None else v["percentile"] * 100
         rows.append(row)
-    _SCREEN_CACHE[("rows", day)] = (time.time(), {"rows": rows})
+    _SCREEN_CACHE[("rows", version, day)] = (time.time(), {"rows": rows})
     return day, rows
 
 
 @app.get("/api/screen/fields")
-def screen_fields(as_of: str = AS_OF):
+def screen_fields(as_of: str = AS_OF, version: int = 1):
     a = asof(as_of)
     with DB.reader_ctx() as r:
-        day, rows = _screen_rows(r, a)
+        day, rows = _screen_rows(r, a, _version(version))
         metric = sorted({k for row in rows for k in row if k not in TEXT_FIELDS and k not in NUM_FIELDS and k != "security_id" and not k.startswith("p_")})
         return ok({"scoring_date": day, "universe": len(rows), "text": TEXT_FIELDS, "numbers": NUM_FIELDS, "metrics": metric,
                    "note": "metrics are ratios (roce 0.2 = 20%): write 20% and it is divided by 100; p_<metric> is the percentile among sector peers (0-100)"}, a)
 
 
 @app.get("/api/screen")
-def screen(q: str = "", as_of: str = AS_OF, sort: str = "score", desc: bool = True, limit: int = 100):
+def screen(q: str = "", as_of: str = AS_OF, sort: str = "score", desc: bool = True, limit: int = 100, version: int = 1):
     """Companies (Nifty 500 members at the scoring date) matching a condition such as `roce > 20% and pe < 25 and score > 60`."""
     from trikal_analytics import screener as SC
 
     a = asof(as_of)
     with DB.reader_ctx() as r:
-        day, rows = _screen_rows(r, a)
+        day, rows = _screen_rows(r, a, _version(version))
         fields = {k for row in rows for k in row if k != "security_id"}
         try:
             hits = SC.run(q, rows, fields)
@@ -637,11 +637,20 @@ def report_pdf(code: str, as_of: str = AS_OF, exchange: str = "NSE"):
     return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'inline; filename="TRIKAL_{c["code"]}_{a.date_ist}.pdf"'})
 
 
-KASAUTI_VERSION = 1
+KASAUTI_VERSION = 1            # the default: the frozen version
+
+
+def _version(v: int) -> int:
+    """A score version that exists (config/scores/kasauti_vN.yaml)."""
+    from trikal_kasauti import config as KC
+
+    if not (KC.SCORES_DIR / f"kasauti_v{int(v)}.yaml").exists():
+        raise HTTPException(422, f"there is no KASAUTI version {v}")
+    return int(v)
 
 
 @app.get("/api/kasauti/report")
-def kasauti_report(as_of: str = AS_OF):
+def kasauti_report(as_of: str = AS_OF, version: int = KASAUTI_VERSION):
     """The report card of the current score version. It looks at returns up to today, so it is shown for NOW only: a rewound
     view must not carry knowledge of what happened afterwards."""
     from trikal_kasauti import config as KC
@@ -649,49 +658,51 @@ def kasauti_report(as_of: str = AS_OF):
     a = asof(as_of)
     if as_of.upper() != "NOW":
         return ok({"available": False, "reason": "the report card judges the score by returns after each date; it is shown for NOW only"}, a)
-    f = KC.report_file(KASAUTI_VERSION)
+    version = _version(version)
+    f = KC.report_file(version)
     if not f.exists():
         return ok({"available": False, "reason": "no report card yet: run trikal kasauti-backtest"}, a)
     fz = KC.frozen()
     return ok({"available": True, "report": json.loads(f.read_text(encoding="utf-8")),
-               "frozen": fz if fz and fz.get("version") == KASAUTI_VERSION else None}, a)
+               "frozen": fz if fz and fz.get("version") == version else None, "version": version}, a)
 
 
 @app.get("/api/company/{code}/kasauti")
-def kasauti_score(code: str, as_of: str = AS_OF, exchange: str = "NSE"):
+def kasauti_score(code: str, as_of: str = AS_OF, exchange: str = "NSE", version: int = KASAUTI_VERSION):
     """The company's stored KASAUTI score at the latest scoring date on or before as_of, with pillars, drivers and what was left out."""
     from trikal_kasauti import config as KC
 
     a = asof(as_of)
-    cfg = KC.load(KASAUTI_VERSION)
+    version = _version(version)
+    cfg = KC.load(version)
     with DB.reader_ctx() as r:
         sid = _sid(r, code, a, exchange)
-        s = r.kasauti_latest(KASAUTI_VERSION, sid, a)
+        s = r.kasauti_latest(version, sid, a)
         if s is None:
-            return ok({"security_id": sid, "available": False, "version": KASAUTI_VERSION,
+            return ok({"security_id": sid, "available": False, "version": version,
                        "reason": "not scored: not a Nifty 500 member on any scoring date up to this as-of (scores are quarterly, from mid-2019)"}, a)
         day = s["as_of"]
         late = (s["computed_at"].date() - day).days > 7 if s["computed_at"] else True
         fz = KC.frozen()
-        return ok({"security_id": sid, "available": True, "version": KASAUTI_VERSION, "scoring_date": day,
+        return ok({"security_id": sid, "available": True, "version": version, "scoring_date": day,
                    "kind": "in-sample reconstruction" if late else "live record",
                    "kind_note": ("computed after the fact from point-in-time inputs; it is not what KASAUTI said on that date"
                                  if late else "computed on the scoring date"),
-                   "frozen": bool(fz and fz.get("version") == KASAUTI_VERSION), "score": s["score"], "confidence": s["confidence"],
+                   "frozen": bool(fz and fz.get("version") == version), "score": s["score"], "confidence": s["confidence"],
                    "status": s["status"], "playbook": s["playbook"], "peer_group": s["peer_group"], "n_peers": s["n_peers"],
                    "detail": s["detail"], "pillar_weights": {k: [{"pillar": p.name, "weight": p.weight} for p in v] for k, v in cfg.profiles.items()},
                    "note": "a research ranking among sector peers, not a rating, target price or advice"}, a)
 
 
 @app.get("/api/company/{code}/kasauti/history")
-def kasauti_history(code: str, as_of: str = AS_OF, exchange: str = "NSE"):
+def kasauti_history(code: str, as_of: str = AS_OF, exchange: str = "NSE", version: int = KASAUTI_VERSION):
     """The company's stored KASAUTI score at every scoring date up to as_of, with the price on those dates."""
     from trikal_api import cards
 
     a = asof(as_of)
     with DB.reader_ctx() as r:
         sid = _sid(r, code, a, exchange)
-        return ok({"security_id": sid, **cards.score_history(r, sid, a)}, a)
+        return ok({"security_id": sid, **cards.score_history(r, sid, a, _version(version))}, a)
 
 
 @app.get("/api/company/{code}/results-card")
@@ -709,11 +720,11 @@ def results_card(code: str, as_of: str = AS_OF, exchange: str = "NSE"):
 
 
 @app.get("/api/heatmap")
-def heatmap(as_of: str = AS_OF):
+def heatmap(as_of: str = AS_OF, version: int = 1):
     """Every scored company with its six pillar scores, to be grouped by sector playbook on screen."""
     a = asof(as_of)
     with DB.reader_ctx() as r:
-        day, rows = _screen_rows(r, a)
+        day, rows = _screen_rows(r, a, _version(version))
         out = [{"code": x["code"], "name": x["name"], "sector": x["sector"], "playbook": x["playbook"], "peer_group": x["peer_group"], "score": x["score"],
                 "confidence": x["confidence"], **{p: x.get(p) for p in PILLARS}} for x in rows if x.get("code")]
         return ok({"scoring_date": day, "universe": len(out), "rows": out,

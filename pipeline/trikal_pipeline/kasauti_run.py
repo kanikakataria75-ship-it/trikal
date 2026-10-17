@@ -97,7 +97,8 @@ def run_backtest(con: duckdb.DuckDBPyConnection, cfg: ScoreConfig, limit: int | 
     rep = BT.evaluate(scores, book, [int(h) for h in bt["horizons_months"]], last, float(bt["top_fraction"]), float(bt["cost_per_side"]))
     rep.update({"version": cfg.version, "config_sha256": cfg.sha256, "generated_at": utcnow().isoformat(), "data_end": last.isoformat(),
                 "label": "in-sample backtest (the score definition was written before looking at these returns, but the history is what "
-                         "it is: short, one COVID cycle, price returns without dividends)",
+                         "it is: short, one COVID cycle, price returns without dividends)"
+                + ("" if cfg.version == 1 else f"; v{cfg.version} was designed after the v1 report card had been seen, with weights fixed before this run"),
                 "conventions": {k: bt[k] for k in ("entry", "cost_per_side", "top_fraction", "benchmark", "returns")}})
     report_path(cfg.version).write_text(json.dumps(rep, default=_json, indent=1), encoding="utf-8")
     return rep

@@ -18,6 +18,7 @@ class Pillar:
     name: str
     weight: float
     metrics: dict[str, tuple[int, float]]        # metric -> (direction, weight)
+    everyone: frozenset = frozenset()            # metrics ranked among every scored company of the date, not only the sector peers
 
 
 @dataclass(frozen=True)
@@ -39,13 +40,15 @@ def load(version: int = 1, directory: Path | None = None) -> ScoreConfig:
     raw = yaml.safe_load(body)
     profiles = {}
     for name, prof in raw["profiles"].items():
-        pillars = tuple(Pillar(k, float(v["weight"]), {m: (int(d), float(w)) for m, (d, w) in v["metrics"].items()})
+        pillars = tuple(Pillar(k, float(v["weight"]), {m: (int(x[0]), float(x[1])) for m, x in v["metrics"].items()},
+                               frozenset(m for m, x in v["metrics"].items() if len(x) > 2 and x[2] == "all"))
                         for k, v in prof["pillars"].items())
         if abs(sum(x.weight for x in pillars) - 1.0) > 1e-9:
             raise ValueError(f"profile {name}: pillar weights must sum to 1")
         profiles[name] = pillars
     return ScoreConfig(int(raw["version"]), raw, hashlib.sha256(body).hexdigest(), int(raw["min_peers"]),
-                       float(raw["min_pillar_coverage"]), int(raw["min_pillars"]), profiles, raw.get("not_in_v1", {}),
+                       float(raw["min_pillar_coverage"]), int(raw["min_pillars"]), profiles,
+                       raw.get(f"not_in_v{raw['version']}", raw.get("not_in_v1", {})),
                        raw.get("backtest", {}))
 
 

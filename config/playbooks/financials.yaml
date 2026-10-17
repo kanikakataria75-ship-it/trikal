@@ -5,7 +5,7 @@ playbooks:
   - id: financials
     label: Financials (parent)
     forbidden:
-      groups: [ebitda_based, ev_based, leverage_nonfinancial, working_capital, distress_nonfinancial]
+      groups: [ebitda_based, ev_based, leverage_nonfinancial, working_capital, distress_nonfinancial, cash_quality_nonfinancial]
       methods: [dcf_fcff, reverse_dcf_fcff, multiples_ev, ev_per_tonne, ev_per_mw]
       reason: "Debt is a lender's raw material and EV is undefined for a balance-sheet business (Damodaran, Investment Valuation 3e ch.21; CFA L2 Equity)."
     peer_group: {min_peers: 8, fallback: financials}

@@ -1,0 +1,51 @@
+# KASAUTI score, version 2 (DRAFT until frozen: see docs/DECISIONS ADR-024). v1 stays frozen and untouched.
+# A research ranking tool, not advice. Same machinery as v1: every metric becomes a percentile among the company's own playbook peers on the
+# scoring date, pillars are weighted means of those percentiles, the score is the weighted mean of the pillars that have enough data.
+# Missing is never imputed: a pillar below `min_pillar_coverage` is dropped and the output says so.
+#
+# What v2 adds to v1, with the weights fixed BEFORE the v2 backtest was run and not changed after seeing it:
+#   earnings_quality  (non-financial companies) cash conversion, accruals and the share of profit that is not from operations
+#   credibility       the share of management's judged numeric statements that were kept (Promise Tracker), ranked among ALL scored companies
+#                     because only about a fifth of the Nifty 500 has any judged statement yet (the transcripts we hold start in 2024), so it
+#                     is a small weight; for most companies the pillar is dropped and the output says so.
+version: 2
+status: draft
+universe: {index: NIFTY500, note: "members effective on the scoring date, point in time"}
+min_peers: 8
+min_pillar_coverage: 0.5
+min_pillars: 3
+# direction +1 = higher is better, -1 = lower is better; an optional third item "all" ranks the metric among every scored company of the date.
+profiles:
+  industrial:
+    pillars:
+      quality:          {weight: 0.20, metrics: {roce: [1, 2], roe: [1, 1], ebitda_margin: [1, 1], net_margin: [1, 1]}}
+      growth:           {weight: 0.14, metrics: {revenue_growth: [1, 1], profit_growth: [1, 1]}}
+      valuation:        {weight: 0.18, metrics: {ev_ebitda: [-1, 1], pe: [-1, 1], pb: [-1, 1], fcf_yield: [1, 1]}}
+      balance:          {weight: 0.13, metrics: {net_debt_ebitda: [-1, 1], debt_to_equity: [-1, 1], interest_coverage: [1, 1], altman_z: [1, 1]}}
+      ownership:        {weight: 0.09, metrics: {promoter_change_4q: [1, 1], pledge_pct: [-1, 1], institution_change_4q: [1, 1]}}
+      momentum:         {weight: 0.13, metrics: {momentum_12_1: [1, 2], momentum_6: [1, 1]}}
+      earnings_quality: {weight: 0.08, metrics: {cfo_to_profit: [1, 1], accruals_ratio: [-1, 1], other_income_share: [-1, 1]}}
+      credibility:      {weight: 0.05, metrics: {promise_kept: [1, 1, all]}}
+  financial:
+    pillars:
+      quality:          {weight: 0.24, metrics: {roe: [1, 2], roa: [1, 1], cost_to_income: [-1, 1]}}
+      growth:           {weight: 0.15, metrics: {revenue_growth: [1, 1], profit_growth: [1, 1]}}
+      valuation:        {weight: 0.19, metrics: {pb: [-1, 2], pe: [-1, 1]}}
+      balance:          {weight: 0.15, metrics: {gnpa_pct: [-1, 1], nnpa_pct: [-1, 1], cet1: [1, 1], credit_cost: [-1, 1], leverage_assets_to_equity: [-1, 1]}}
+      ownership:        {weight: 0.09, metrics: {promoter_change_4q: [1, 1], pledge_pct: [-1, 1], institution_change_4q: [1, 1]}}
+      momentum:         {weight: 0.13, metrics: {momentum_12_1: [1, 2], momentum_6: [1, 1]}}
+      credibility:      {weight: 0.05, metrics: {promise_kept: [1, 1, all]}}
+# Still not in v2. They are reported as dropped on every score.
+not_in_v2:
+  macro_fit:  "sector sensitivities are mostly low-confidence statistics (RISKS R-36); not used as a score input"
+  forensics:  "related-party transactions, auditor changes and contingent liabilities are M9; v2 has only three cash-based earnings-quality ratios"
+  sector_regime: "the peer percentile removes sector effects by construction; a cross-sector regime term is not in v2"
+backtest:
+  start: 2023-03-31
+  rebalance: quarterly
+  horizons_months: [1, 3, 6, 12]
+  entry: next_session_open
+  cost_per_side: 0.0025
+  top_fraction: 0.1
+  benchmark: equal-weight Nifty 500 members (the total-return index is not held)
+  returns: price returns on split/bonus-adjusted prices; dividends are not included

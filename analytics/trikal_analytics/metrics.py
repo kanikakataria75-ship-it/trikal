@@ -465,6 +465,57 @@ def fcf(c: Ctx):
     return _val(c, "fcf", cfo.value + sum(v.value for v in cap), [_inp("cash_flow_operations", cfo), *(_inp(v.line_item, v) for v in cap)])
 
 
+# ---- earnings quality (non-financial companies; KASAUTI v2) --------------------------------------------------
+
+def _cfo_and_profit(c: Ctx, mid: str):
+    """Latest 12-month cash flow from operations and the profit of the same 12 months (cash-flow statements are filed half-yearly and yearly)."""
+    cfo = c.latest_period("cash_flow_operations", 12)
+    if not cfo:
+        return _na(mid, "cash_flow_operations (12-month)")
+    if (c.as_of.date_ist - cfo.period_end).days > STALE_FINANCIALS_DAYS:
+        return _na(mid, "cash_flow_operations", reason="older than 18 months")
+    pat = next((v for li in ("profit_attributable_to_owners", "profit_after_tax") for v in c.series(li) if v.months == 12 and v.period_end == cfo.period_end), None)
+    if pat is None:
+        return _na(mid, "profit for the same 12 months")
+    c._note([cfo, pat])
+    return cfo, pat
+
+
+@metric("cfo_to_profit", "x", "latest 12-month cash flow from operations / profit attributable to owners of the same 12 months")
+def cfo_to_profit(c: Ctx):
+    t = _cfo_and_profit(c, "cfo_to_profit")
+    if isinstance(t, NotAvailable):
+        return t
+    cfo, pat = t
+    if pat.value <= 0:
+        return Undefined("cfo_to_profit", "profit <= 0")
+    return _val(c, "cfo_to_profit", cfo.value / pat.value, [_inp("cash_flow_operations", cfo), _inp(pat.line_item, pat)])
+
+
+@metric("accruals_ratio", "ratio", "(profit - cash flow from operations) / total assets, latest 12 months: high means profit is not turning into cash")
+def accruals_ratio(c: Ctx):
+    t = _cfo_and_profit(c, "accruals_ratio")
+    if isinstance(t, NotAvailable):
+        return t
+    cfo, pat = t
+    ta = c.instant("total_assets")
+    if ta is None:
+        return _na("accruals_ratio", "total_assets")
+    if ta.value <= 0:
+        return Undefined("accruals_ratio", "assets <= 0")
+    return _val(c, "accruals_ratio", (pat.value - cfo.value) / ta.value, [_inp("cash_flow_operations", cfo), _inp(pat.line_item, pat), _inp("total_assets", ta)])
+
+
+@metric("other_income_share", "ratio", "trailing other income / trailing profit before tax: how much of the profit is not from operations")
+def other_income_share(c: Ctx):
+    oi, pbt = c.ttm("other_income"), c.ttm("profit_before_tax")
+    if not oi or not pbt:
+        return _na("other_income_share", *(n for n, v in (("other_income", oi), ("profit_before_tax", pbt)) if not v))
+    if pbt[0] <= 0:
+        return Undefined("other_income_share", "profit before tax <= 0")
+    return _val(c, "other_income_share", oi[0] / pbt[0], [_inp(v.line_item, v) for v in (*oi[1], *pbt[1])])
+
+
 # ---- market-based -------------------------------------------------------------------------------------------
 
 @metric("market_cap", "INR", "last close x shares outstanding (paid-up capital / face value, rolled for later splits and bonuses)")

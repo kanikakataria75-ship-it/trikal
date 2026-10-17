@@ -324,3 +324,10 @@ For a company C on scoring date t, with peer set P (same playbook among the Nift
 - driver points of a metric = 100·(W_k/ΣW)·(w_m/Σw)·(p(m) − 0.5).
 Ownership inputs are changes over about four quarters (promoter, and mutual funds + FPI + insurance together, in percentage points) and the pledge as % of total shares (live record only: the exchange keeps no pledge history). Momentum is the adjusted close 21 sessions ago over the close 252 sessions ago (12-1 months) and the 126-session return.
 Report card: forward return = open at the first session on or after (entry + h months) over the open of the first session after the scoring date; rank IC = Spearman correlation of score and forward return per date; t-statistic of the mean IC with Newey-West (Bartlett) weights and lag `ceil(h/3) − 1`; the portfolio holds the top 10% equal weight from one scoring date to the next and pays `cost_per_side` on every name bought or sold.
+
+## KASAUTI v2 (2026-10-18, config/scores/kasauti_v2.yaml)
+
+Same scoring as v1 plus two pillars and a few weights moved (industrial: quality .20, growth .14, valuation .18, balance .13, ownership .09, momentum .13, earnings quality .08, credibility .05; financial: no earnings quality, quality .24, growth .15, valuation .19, balance .15, ownership .09, momentum .13, credibility .05).
+- `cfo_to_profit` = latest 12-month cash flow from operations / profit attributable to owners of the same 12 months (undefined if profit <= 0); `accruals_ratio` = (profit - cash flow from operations) / total assets (lower is better); `other_income_share` = trailing other income / trailing profit before tax (lower is better; undefined if PBT <= 0). Not defined for financials.
+- `promise_kept` = (Σ s + 0.5·2) / (n + 2), s = 1 for a statement judged delivered, 0.5 partially, 0 missed; n = statements judged with results public on the scoring date; none if n < 2. Ranked among every scored company of the date (a metric marked `all` in the config), not within the sector.
+

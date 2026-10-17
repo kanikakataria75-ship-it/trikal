@@ -15,20 +15,20 @@ import { useCompany, useHeatmap, useKasHistory, useResultsCard, type CardRow } f
 import { dmy, dmyTime, indianGroup, inr } from "@/lib/format";
 import { useNotes } from "@/lib/lists";
 import { useT } from "@/lib/store";
-import { PanelState, usePanelAsOf } from "./common";
+import { PanelState, Seg, usePanelAsOf } from "./common";
 import type { PanelProps } from "./PanelsA";
 
 echarts.use([LineChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
 
-const PILLARS = ["quality", "valuation", "growth", "balance", "momentum", "ownership"] as const;
-const PNAME: Record<string, string> = { quality: "Quality", valuation: "Valuation", growth: "Growth", balance: "Balance", momentum: "Momentum", ownership: "Ownership" };
+const PILLARS = ["quality", "valuation", "growth", "balance", "momentum", "ownership", "earnings_quality", "credibility"] as const;
+const PNAME: Record<string, string> = { quality: "Quality", valuation: "Valuation", growth: "Growth", balance: "Balance", momentum: "Momentum", ownership: "Ownership", earnings_quality: "Earnings quality", credibility: "Credibility" };
 const signed = (x: number, d = 1) => `${x >= 0 ? "+" : "−"}${Math.abs(x).toFixed(d)}`;
 const pctS = (x: number | null | undefined, d = 1) => (x === null || x === undefined ? "—" : `${signed(x * 100, d)}%`);
 const tone = (x: number | null | undefined) => (x === null || x === undefined || Math.abs(x) < 1e-9 ? "" : x > 0 ? "pos" : "neg");
 
 /* ───────────────────────────────────────────── score history (inside KAS) ───────────────────────────────────────────── */
-export function ScoreHistory({ code, asOf }: { code: string; asOf: string }) {
-  const q = useKasHistory(code, asOf);
+export function ScoreHistory({ code, asOf, version = 1 }: { code: string; asOf: string; version?: number }) {
+  const q = useKasHistory(code, asOf, { version });
   const el = useRef<HTMLDivElement>(null);
   const pts = q.data?.available ? q.data.points : [];
   useEffect(() => {
@@ -173,7 +173,8 @@ export function HEAT({ params }: PanelProps) {
   const code = useT((s) => s.code);
   const setCode = useT((s) => s.setCode);
   const asOf = usePanelAsOf(params.pin);
-  const q = useHeatmap(asOf);
+  const [ver, setVer] = useState(1);
+  const q = useHeatmap(asOf, ver);
   const [pick, setPick] = useState<string | null>(null);
   const [key, setKey] = useState<string>("score");
   const rows = q.data?.rows ?? [];
@@ -184,6 +185,7 @@ export function HEAT({ params }: PanelProps) {
   }, [rows]);
   const mine = rows.find((r) => r.code === code)?.playbook;
   const group = pick ?? mine ?? groups[0]?.[0] ?? "";
+  const cols = PILLARS.filter((k) => rows.some((r) => r.playbook === group && typeof r[k] === "number"));
   const list = rows.filter((r) => r.playbook === group).sort((a, b) => ((b[key] as number | null) ?? -1) - ((a[key] as number | null) ?? -1));
   const med = (k: string) => {
     const v = list.map((r) => r[k] as number | null).filter((x): x is number => typeof x === "number").sort((a, b) => a - b);
@@ -198,23 +200,24 @@ export function HEAT({ params }: PanelProps) {
               <select value={group} onChange={(e) => setPick(e.target.value)}>
                 {groups.map(([g, n]) => <option key={g} value={g}>{g.replace(/_/g, " ")} ({n}){g === mine ? " · " + code : ""}</option>)}
               </select>
+              <Seg value={String(ver)} onChange={(v) => setVer(Number(v))} options={[{ v: "1", l: "v1" }, { v: "2", l: "v2 draft" }]} />
               <span className="t-dim">scored {dmy(q.data!.scoring_date)} · {list.length} companies · click a header to sort, a row to open</span>
               <i className="heat-key"><b style={{ background: shade(10) }}>weak</b><b style={{ background: shade(50) }}>middle</b><b style={{ background: shade(90) }}>strong</b></i>
             </div>
             <table className="t-table heat-tab">
               <thead><tr><th>Company</th>
-                {["score", ...PILLARS].map((k) => <th key={k} className={key === k ? "on" : ""} onClick={() => setKey(k)}>{k === "score" ? "Score" : PNAME[k]}</th>)}</tr></thead>
+                {["score", ...cols].map((k) => <th key={k} className={key === k ? "on" : ""} onClick={() => setKey(k)}>{k === "score" ? "Score" : PNAME[k]}</th>)}</tr></thead>
               <tbody>
                 {list.map((r) => (
                   <tr key={r.code} className={r.code === code ? "me" : ""} onClick={() => setCode(r.code)}>
                     <td><b className="mono">{r.code}</b> <span className="t-dim">{r.name}</span></td>
-                    {["score", ...PILLARS].map((k) => {
+                    {["score", ...cols].map((k) => {
                       const v = r[k] as number | null;
                       return <td key={k} className="mono heat-c" style={{ background: shade(v) }}>{v === null || v === undefined ? "·" : Math.round(v)}</td>;
                     })}
                   </tr>
                 ))}
-                <tr className="heat-med"><td>Median of this group</td>{["score", ...PILLARS].map((k) => <td key={k} className="mono">{med(k) === null ? "·" : Math.round(med(k)!)}</td>)}</tr>
+                <tr className="heat-med"><td>Median of this group</td>{["score", ...cols].map((k) => <td key={k} className="mono">{med(k) === null ? "·" : Math.round(med(k)!)}</td>)}</tr>
               </tbody>
             </table>
             <div className="t-foot">{q.data!.note} A dot means the pillar was left out for this company. KASAUTI v1 is a ranking among peers, not a rating.</div>

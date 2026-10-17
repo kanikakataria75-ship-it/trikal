@@ -11,9 +11,26 @@ from trikal_analytics.result import Value
 from trikal_core.pit import PitReader
 from trikal_core.timeutil import AsOf
 from trikal_kasauti.config import Pillar, ScoreConfig
+from trikal_analytics import promises as PR
 from trikal_kasauti.factors import FACTOR_METRICS, PriceBook, ownership_factors
 
 MIN_VALID_FOR_RANK = 5          # fewer valid values than this in a peer group: the metric is not ranked there
+
+
+PROMISE_PRIOR = 2          # shrinkage: two imaginary statements at 50%, so one lucky or unlucky statement cannot decide a pillar
+PROMISE_MIN_JUDGED = 2
+
+
+def promise_kept(engine: M.Engine, reader: PitReader, sid: str, as_of: AsOf) -> float | None:
+    """Share of management's judged numeric statements that were kept (delivered = 1, partially = 0.5, missed = 0), shrunk toward 0.5.
+    Only statements judged with results public at `as_of`; None until PROMISE_MIN_JUDGED have been judged (most companies, today)."""
+    proms = PR.dedupe(reader.concall_promises(sid, as_of))
+    if not proms:
+        return None
+    pts = [PR.SCORE[v] for v in (PR.judge(engine, sid, p, as_of)["verdict"] for p in proms) if v in PR.SCORE]
+    if len(pts) < PROMISE_MIN_JUDGED:
+        return None
+    return (sum(pts) + 0.5 * PROMISE_PRIOR) / (len(pts) + PROMISE_PRIOR)
 
 
 def profile_of(playbook) -> str:
@@ -40,6 +57,8 @@ def raw_metrics(engine: M.Engine, reader: PitReader, book: PriceBook | None, sid
             skipped[m] = f"caution: {caution}"
             continue
         values[m] = v.value
+    if "promise_kept" in {m for p in cfg.profiles[prof] for m in p.metrics}:
+        values["promise_kept"] = promise_kept(engine, reader, sid, as_of)
     values.update(ownership_factors(reader, sid, as_of))
     values.update(book.momentum(sid, as_of.date_ist) if book else {"momentum_12_1": None, "momentum_6": None})
     return {"security_id": sid, "playbook": pb.id, "profile": prof, "parent": "financials" if prof == "financial" else "industrial",
@@ -62,6 +81,7 @@ def score_panel(rows: list[dict], cfg: ScoreConfig, as_of: dt.date) -> list[dict
         by_pb[r["playbook"]].append(r)
         by_parent[r["parent"]].append(r)
 
+    everyone = {"all": rows}
     cache: dict[tuple[str, str, str], list[float]] = {}
 
     def distribution(group_key: str, group: list[dict], metric: str) -> list[float]:
@@ -77,7 +97,7 @@ def score_panel(rows: list[dict], cfg: ScoreConfig, as_of: dt.date) -> list[dict
             peers, key, fallback = by_parent[r["parent"]], r["parent"], True
         pillars_out, dropped = {}, {}
         for pil in cfg.profiles[r["profile"]]:
-            res = _pillar(pil, r, peers, key, distribution)
+            res = _pillar(pil, r, peers, key, distribution, everyone)
             if res["coverage"] < cfg.min_pillar_coverage:
                 dropped[pil.name] = f"only {res['coverage']:.0%} of its metric weight has data (needs {cfg.min_pillar_coverage:.0%})"
             else:
@@ -97,12 +117,12 @@ def score_panel(rows: list[dict], cfg: ScoreConfig, as_of: dt.date) -> list[dict
     return out
 
 
-def _pillar(pil: Pillar, r: dict, peers: list[dict], key: str, distribution) -> dict:
+def _pillar(pil: Pillar, r: dict, peers: list[dict], key: str, distribution, everyone: dict) -> dict:
     total_w = sum(w for _, w in pil.metrics.values())
     got_w, acc, detail = 0.0, 0.0, {}
     for m, (direction, w) in pil.metrics.items():
         v = r["values"].get(m)
-        dist = distribution(key, peers, m)
+        dist = distribution("all", everyone["all"], m) if m in pil.everyone else distribution(key, peers, m)
         if v is None or len(dist) < MIN_VALID_FOR_RANK:
             detail[m] = {"value": v, "percentile": None}
             continue

@@ -126,12 +126,12 @@ def results_card(r: PitReader, sid: str, a: AsOf, promises: list[dict]) -> dict:
             "note": "figures are from the filings public at the as-of date (consolidated where reported); EBITDA is computed as profit before tax + interest + depreciation - other income"}
 
 
-def score_history(r: PitReader, sid: str, a: AsOf) -> dict:
+def score_history(r: PitReader, sid: str, a: AsOf, version: int = 1) -> dict:
     """The stored KASAUTI score at every scoring date up to as-of, with the price at each date (adjusted as known then)."""
-    days = [d for d in r.kasauti_dates(1) if d <= a.date_ist]
+    days = [d for d in r.kasauti_dates(version) if d <= a.date_ist]
     pts = []
     for d in days:
-        s = (r.kasauti_scores(1, d, sid) or [None])[0]
+        s = (r.kasauti_scores(version, d, sid) or [None])[0]
         if not s or s["score"] is None:
             continue
         pil = {k: v["score"] for k, v in (s["detail"] or {}).get("pillars", {}).items()}
