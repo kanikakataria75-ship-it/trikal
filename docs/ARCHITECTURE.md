@@ -135,8 +135,8 @@ Each source = `fetch` asset (→ raw) → `parse` asset (→ staging) → `load`
 
 ### 4.3 Corporate-action adjustment (invariant 7)
 - Store **only unadjusted** prices plus `corp_action` events.
-- Adjusted series computed on read: `adj_factor(t | as_of) = Π factors of actions with ex_date > t AND announced_at <= as_of`. So a rewind to 2020 shows prices adjusted for splits known by 2020 only, exactly what a 2020 terminal would show. (Corporate-action leak test, §2.2.)
-- Factors: split/consolidation (FV ratio), bonus (`(a+b)/a`), rights (theoretical ex-rights price method), special dividends above a threshold (configurable, off by default; ordinary dividends are tracked for total-return series only), demerger (price-ratio method from the first post-demerger session of parent + spun-off entity, documented in FORMULAS.md).
+- Adjusted series computed on read: `adj_factor(t | as_of) = Π factors of applied events with t < ex_date <= as_of`. So a rewind to 2020 shows prices adjusted only for actions that had gone ex by then, exactly what a 2020 terminal would show. (Corporate-action leak test, §2.2.)
+- Factors and the decision rules that combine announced actions, the exchange's base price and the observed price move are specified in [FORMULAS.md](FORMULAS.md#corporate-actions--adjusted-prices-adr-009-adr-012) (revised during M1 after finding that legacy NSE PREVCLOSE is not adjusted).
 - Per-share fundamentals (EPS, BVPS, DPS) adjusted by the same factor function.
 - Total-return index per security (dividends reinvested at ex-date close) for backtests.
 
@@ -206,7 +206,7 @@ Rendering budget: 3D scenes lazy-loaded, rendered on demand (`frameloop="demand"
 
 ## 9. Deployment & environments
 
-- **Local first.** Windows 11 host → Docker Desktop (WSL2 backend) for Postgres/Timescale + Dagster; Python and Node run natively or in containers **[Q4]**.
+- **Local first.** Windows 11 host. M1 runs on embedded DuckDB + a SQLite raw index (ADR-010) because Docker is not installed; the Postgres/Timescale + Dagster target remains for when Docker Desktop (WSL2) is available.
 - Environments: `dev` (local), later `prod` (single VM, e.g. 4 vCPU / 16 GB / 500 GB SSD is ample for v1), never a public endpoint until licensing is resolved (RISKS R-1).
 - Backups: nightly `pg_dump` + raw zone sync (raw is the ultimate source of truth; canonical can be rebuilt from it).
 

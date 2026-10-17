@@ -1,0 +1,43 @@
+# KASAUTI score, version 1 (DRAFT until frozen: see docs/DECISIONS ADR-022).
+# A research ranking tool, not advice. Every metric becomes a percentile among the company's own playbook peers on the scoring date
+# (never an absolute threshold), pillars are weighted means of those percentiles, and the score is the weighted mean of the pillars
+# that have enough data. Missing is never imputed: a pillar below `min_pillar_coverage` is dropped and the output says so.
+version: 1
+status: draft
+universe: {index: NIFTY500, note: "members effective on the scoring date, point in time"}
+min_peers: 8                    # fewer same-playbook peers than this: rank among the parent group, and say so in the output
+min_pillar_coverage: 0.5        # share of a pillar's metric weight that must have a value
+min_pillars: 3                  # fewer scored pillars than this: no score
+# direction +1 = higher is better, -1 = lower is better. Metrics the company's playbook forbids, or flags with a caution, are skipped.
+profiles:
+  industrial:                    # every playbook that is not a financials one
+    pillars:
+      quality:   {weight: 0.25, metrics: {roce: [1, 2], roe: [1, 1], ebitda_margin: [1, 1], net_margin: [1, 1]}}
+      growth:    {weight: 0.15, metrics: {revenue_growth: [1, 1], profit_growth: [1, 1]}}
+      valuation: {weight: 0.20, metrics: {ev_ebitda: [-1, 1], pe: [-1, 1], pb: [-1, 1], fcf_yield: [1, 1]}}
+      balance:   {weight: 0.15, metrics: {net_debt_ebitda: [-1, 1], debt_to_equity: [-1, 1], interest_coverage: [1, 1], altman_z: [1, 1]}}
+      ownership: {weight: 0.10, metrics: {promoter_change_4q: [1, 1], pledge_pct: [-1, 1], institution_change_4q: [1, 1]}}
+      momentum:  {weight: 0.15, metrics: {momentum_12_1: [1, 2], momentum_6: [1, 1]}}
+  financial:                     # banks, NBFCs, insurers, AMCs ... (playbooks under `financials`)
+    pillars:
+      quality:   {weight: 0.25, metrics: {roe: [1, 2], roa: [1, 1], cost_to_income: [-1, 1]}}
+      growth:    {weight: 0.15, metrics: {revenue_growth: [1, 1], profit_growth: [1, 1]}}
+      valuation: {weight: 0.20, metrics: {pb: [-1, 2], pe: [-1, 1]}}
+      balance:   {weight: 0.15, metrics: {gnpa_pct: [-1, 1], nnpa_pct: [-1, 1], cet1: [1, 1], credit_cost: [-1, 1], leverage_assets_to_equity: [-1, 1]}}
+      ownership: {weight: 0.10, metrics: {promoter_change_4q: [1, 1], pledge_pct: [-1, 1], institution_change_4q: [1, 1]}}
+      momentum:  {weight: 0.15, metrics: {momentum_12_1: [1, 2], momentum_6: [1, 1]}}
+# Pillars named in PROMPT section 6.1 that v1 does not have the data for. They are reported as dropped on every score.
+not_in_v1:
+  credibility: "needs the Promise Tracker (M6); rule-based version not built yet"
+  macro_fit:  "sector sensitivities are mostly low-confidence statistics (RISKS R-36); not used as a score input"
+  forensics:  "forensic flags (accruals, related-party, auditor changes) are M9"
+  sector_regime: "the peer percentile removes sector effects by construction; a cross-sector regime term is not in v1"
+backtest:
+  start: 2023-03-31             # the exchange's 2018-2021 XBRL result files are partial (no full statements) and the HTML era ends in 2017: full inputs exist from 2022
+  rebalance: quarterly          # last session of Mar / Jun / Sep / Dec
+  horizons_months: [1, 3, 6, 12]
+  entry: next_session_open      # ADR-003 tradability convention
+  cost_per_side: 0.0025         # 0.25%: STT 0.1% + stamp, exchange, GST, brokerage and a small impact allowance, each side
+  top_fraction: 0.1
+  benchmark: equal-weight Nifty 500 members (the total-return index is not held)
+  returns: price returns on split/bonus-adjusted prices; dividends are not included

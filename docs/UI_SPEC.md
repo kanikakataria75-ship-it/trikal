@@ -186,3 +186,20 @@ Numbers: right-aligned, tabular mono, Indian grouping optional (`1,23,456` vs `1
 ## 11. Visual regression
 
 Playwright screenshots of key screens in both colour modes, Dense/Comfort, and one rewound `as_of`, seeded from a fixed fixture DB (fixtures are clearly marked test data and never reach the real app).
+
+## 10. Two interface modes (M5, 2026-10-13)
+
+One switch (`◆ CINEMA | ▮ PRO` in the header and on the home page; command `MODE PRO` / `MODE CINEMA`; the choice is remembered).
+
+| | CINEMA | PRO |
+|---|---|---|
+| Entry | home page (touchstone hero, Time Machine) | straight into the terminal (`/` redirects; the logo link `/?stay=1` returns to the home page) |
+| Look | Obsidian & Gold, serif display, glow, 3D | flat graphite + gold, one monospace face, no gradients/glow/animation/rounded corners |
+| Layout | company desk with the price chart as centre | six groups on one screen: DES+RV · GP+FA · MAP+MACRO (everything else as tabs) |
+| DES | 3D touchstone of the price history | log-scale line (2D twin) |
+| Market on a day | 3D city (home) | `MAP` heatmap: sector → stock, area = turnover, colour = move |
+| Keys | `/`, Ctrl K, `[` `]`, L, D | adds a function-key bar: F1 HELP · F2 DES · F3 GP · F4 FA · F6 RV · F7 MAP · F8 MACRO · F9 WC · F10 OWN (F5/F11/F12 stay with the browser) |
+
+Data, point-in-time rules, sector law, lineage and value states are identical in both modes; only presentation differs.
+Inspired by the density and discipline of professional terminals, with TRIKAL's own name, palette and function codes (no vendor
+branding, colours or code names are used). Every new 3D visual ships with a 2D twin (UI_SPEC §8).

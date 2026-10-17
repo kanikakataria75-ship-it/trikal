@@ -100,3 +100,79 @@ Rating actions arrive two ways: (a) agency press releases (CRISIL, ICRA, CARE, I
 | PIT sector classification & index history | Must be reconstructed before 2022 | NSE Indices data licence, Prowess, vendors above |
 | Redistribution rights (if TRIKAL ever goes public) | Not available | NSE Data & Analytics, BSE data licence |
 | Commodity prices | Monthly proxies only | Exchange/vendor feeds |
+
+---
+
+## 9. Findings during M1 ingestion (2026-10-09/10)
+
+| Source | Finding | Consequence |
+|---|---|---|
+| `nse.bhav.legacy` | ISIN + TOTALTRADES columns appear from **Aug-2011**; files exist back to **Nov-1994** (e.g. 02-Jan-1995). | Pre-Aug-2011 rows get identity through code continuity / symbol chains (FORMULAS.md §Security identity). |
+| `nse.bhav.legacy` | **PREVCLOSE is not adjusted** for corporate actions (TCS bonus 1:1, ex 31-May-2018: PREVCLOSE 3514.10, CLOSE 1741.05). | Adjustments come from announcements confirmed by the observed price move (ADR-012 revised). |
+| `nse.bhav.udiff` | First UDiFF file: **08-Jul-2024**; legacy files still exist up to 05-Jul-2024. | Cut-over fixed in `sources/bhav.py`. |
+| NSE archives | Days without a session answer **HTTP 404**. | Clean `no_session` signal for the calendar. |
+| `bse.bhav.*` | Days without a file answer **HTTP 200 with an HTML placeholder** (14,287 B). Formats: legacy `EQDDMMYY_CSV.ZIP` from ~2007, `EQ_ISINCODE_DDMMYY.zip` (with ISIN) ~2017–2024, UDiFF from 2024. | Payloads validated by content. A BSE placeholder on an NSE session day is treated as **unknown**, not a holiday. |
+| `bse.bhav.*` | **Source files have holes**: e.g. BSE 15-Jul-2022 file (3,019 rows) omits TCS (532540), which traded that day. | Price-signal comparisons require adjacent sessions; such gaps never create adjustment factors. |
+| `nse.corp_actions` | Date-range endpoint returns all companies for a month (382 monthly calls for 1995–2026, 43,794 records). `caBroadcastDate` is null in old records. | `known_at` imputed as ex-date 09:00 IST (conservative). Old subjects quote dividends as % of face value. |
+| `nse.symbol_change` | No header row; columns: company, old, new, date. 1,065 records. | Parsed positionally. |
+| `nse.delisted` | Two-digit years (`15-Apr-02`), no ISIN; 328 records (from 2002). | Delisting dates split trading episodes. |
+| `niftyindices.media` | All **1,513 press releases (Sep-1998 →)** are listed in the static HTML of `/media`; PDFs at `/Press_Release/ind_prsDDMMYYYY[_n].pdf`. 848 relevant PDFs fetched, 5 failed (logged). | Basis of the membership reconstruction (ADR-013). |
+| `niftyindices` snapshots | Official constituent files can contain **placeholder rows** during corporate actions (e.g. `DUMMYHEG`, "Dummy HEG Ltd.", ISIN `DUM545A01024`, Oct-2026), and **REIT units** (Nifty 500 includes REITs from 30-Sep-2026). | Placeholders excluded and logged; REIT constituents identified by symbol → ISIN. |
+| Press releases | Changes can be **voided, deferred or revoked** in later free-text releases (27-Mar-2020 rebalance voided on 13-May-2020; Vodafone Idea exclusion revoked 25-Sep-2024, Prism Johnson excluded instead). | Curated, cited overrides in `config/index_overrides.yaml`. |
+| Press releases | Before ~2011 lists give company names only, often followed by the industry ("Munjal Showa Ltd. Auto Ancillaries"); pre-2010 PDFs are web-page printouts with navigation text mixed in. | Name matching with confidence; navigation text stripped. |
+
+---
+
+## 10. Findings during M2 ingestion (2026-10-12)
+
+| Source | Finding | Consequence |
+|---|---|---|
+| `nse.results` list (`corporates-financial-results`) | Up to ~160 rows per company back to 2005; each row has an exact `broadCastDate`. XBRL links (`…/xbrl/*.xml`) exist only from period-end Jun-2017; earlier rows have `xbrl/-` and an HTML `resultDetailedDataLink` instead. Some old periods were re-broadcast years later (TCS FY16 in 2018). | Two parsers; the earliest-known value of an unchanged figure is kept (value-change PIT table). |
+| `integrated-filing-results?index=equities&symbol=X&size=500` | New SEBI "Integrated Filing" endpoint carrying results from the Dec-2024 quarter (the old endpoint stops there). It also lists "Governance" documents (about 40% of rows) that are not financial statements. Paged at 20 rows unless `size` is given. | Added to the downloader; Governance rows filtered by `type`. |
+| Results XBRL | Context ids encode the column (`OneD`, `FourD`); `FourD` dates are the quarter's, not the year's. Values in full rupees. Annual and half-yearly filings include balance sheet and cash flow. Families: `INDAS`, `BANKING`, `NBFC_INDAS`, `NONINDAS`, `INTEGRATED`. | FORMULAS.md, Financial statements. Banks expose NPA amounts and ROA but no loan-book or NIM concepts. |
+| Old results HTML | Labels vary by company and year; amounts in ₹ lakh; "Total expenses" sometimes includes finance costs and sometimes not; Part II "Number of shares" rows are rendered one group earlier than their headers. | Lossless `html:<slug>` facts, validated Part II, convention-tolerant identity check. |
+| `corporate-share-holdings-master` | Returns only the latest ~20 quarters (since Sep-2021) regardless of date parameters. Revised records replace the original (its values and broadcast time are not retained). SHP XBRL is 0.3–1.3 MB each; context naming changed between 2018, 2023 and 2025; the percentage scale varies (fraction vs percent). | Normalising parser. Shareholding before Sep-2021 is limited to the promoter/public summary (RISKS R-27). |
+| `corporate-pledgedata` | Latest quarter only; `from_date`, `to_date`, `size` and `period_ended` do not return history. | Forward-accumulating snapshots (RISKS R-26). |
+| `annual-reports` | PDF list per company and year (list only; the PDFs are for M6). | |
+| niftyindices constituent files | Nifty Total Market (755 names) and Microcap 250 carry the NSE sector label per company, current only. | `classification` (FORMULAS.md). |
+| `www.nseindia.com/api/*` | Needs a browser User-Agent and a Referer; read timeouts occur when the laptop sleeps. | The job is resumable and requests keep-awake while it runs. |
+
+## 11. Context layer for the Time Machine (M3, 2026-10-13)
+
+| Source key | URL pattern | Coverage | Licence |
+|---|---|---|---|
+| `wiki.day` | `https://en.wikipedia.org/wiki/Portal:Current_events/<YYYY>_<Month>_<D>?action=raw` | daily pages from 2003 | CC BY-SA 4.0 |
+| `wiki.year` | `https://en.wikipedia.org/wiki/<YYYY>?action=raw` (Events section) | world events by date; used before 2003 | CC BY-SA 4.0 |
+| `wiki.india` | `https://en.wikipedia.org/wiki/<YYYY>_in_India?action=raw` (Events section) | Indian events by date, 1994 onward | CC BY-SA 4.0 |
+
+- robots.txt disallows `/w/` and `/api/` for crawlers but allows `/wiki/`; raw wikitext is fetched from `/wiki/…?action=raw`
+  with a descriptive User-Agent at ≤ 1 request/second, stored in the raw zone, parsed by `trikal_pipeline.sources.wiki_context`
+  into `context_event` (page title + raw sha kept for lineage).
+- **What it is:** editorial summaries written by Wikipedia editors, often after the fact. Daily-page items keep their original
+  outlet ("Reuters", "BBC News", …) and link. **What it is not:** data. It has no `known_at`, it never feeds a metric, score or
+  backtest, and the UI shows only items dated on or before the session on screen, with source and licence.
+- Commands: `trikal fetch-context` (the built-in Time Machine days ±3 + every year page), `trikal fetch-context --days all`
+  (every day from 1994; ~8,700 daily pages, ≈ 2.5 h at the polite rate), `--days 2008-01-01:2008-12-31`.
+- Before public sharing: CC BY-SA requires attribution (shown in the UI) and share-alike for adapted text; we display the text
+  unmodified apart from markup removal.
+
+## 12. Macro sources (M5, verified 2026-10-13)
+
+| Source key | Endpoint | Series | Notes |
+|---|---|---|---|
+| `fred.csv` | `https://fred.stlouisfed.org/graph/fredgraph.csv?id=<ID>` | DEXINUS, DCOILBRENTEU, DGS10, DFF, DTWEXBGS, VIXCLS, INDIRLTLT01STM, INDCPIALLMINMEI, IRSTCI01INM156N | Keyless, latest vintage only; rejects browser-like user agents, works with a descriptive one. |
+| `fred.vintage` | `https://api.stlouisfed.org/fred/series/observations?...&realtime_start=1776-07-04&realtime_end=9999-12-31` | same | Needs `FRED_API_KEY` in `.env` (owner). Gives every vintage → exact first-release dates. |
+| `mospi.cpi` | `https://api.mospi.gov.in/api/cpi/getCPIIndex?base_year=2012&series=Current&year=<Y>&state_code=99&sector_code=3` | CPI general, consumer food price (All India, Combined) | eSankhyiki API; ≤ 200 rows/page; host needs legacy TLS renegotiation (scoped to it). 2012 base runs to Dec-2025; the 2024 base (from 2025) uses different codes, not wired yet. |
+| `wb.pinksheet` | `https://thedocs.worldbank.org/.../CMO-Historical-Data-Monthly.xlsx` (link read from `worldbank.org/en/research/commodity-markets` each run) | 17 commodities, monthly since 1960 | The document id changes with every release; an old link silently serves a stale file. |
+
+Not used yet: RBI DBIE (no stable public API), GDELT (unreliable responses during probing), FBIL reference rates.
+`trikal fetch-macro` fetches and loads everything (~150k observations, 3 s load via CSV COPY).
+
+## 13. Live prices (owner's own broker account)
+
+NSE's public quote API (`/api/quote-equity`, `/api/allIndices`) answers `403 Access Denied` behind bot protection; TRIKAL does not try to get around it.
+Live prices therefore come from the owner's own Angel One SmartAPI account (`api/trikal_api/live.py`):
+login (`/rest/auth/angelbroking/user/v1/loginByPassword`, API key + client code + MPIN + TOTP) then market quotes
+(`/rest/secure/angelbroking/market/v1/quote/`, FULL mode, up to 50 tokens per call, ~1 call/s). Symbol→token map from the public
+instrument file `OpenAPIScripMaster.json` (cached 7 days). Read-only by construction: only those two paths can be called (tested).
+Live exists only for `as_of=NOW`; rewound views use the exchange's end-of-day prices. Redistribution is not allowed by the broker's terms: personal use only.

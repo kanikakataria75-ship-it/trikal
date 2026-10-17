@@ -1,0 +1,15 @@
+/* MAP — flat heatmap of the day's market */
+.map { padding: 6px; }
+.mp { display: flex; flex-direction: column; height: 100%; gap: 5px; }
+.mp-bar { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; font-size: 11px; color: var(--fg-1); }
+.mp-bar b { color: var(--fg-0); font-weight: 500; }
+.mp-bar i { font-style: normal; font-family: var(--font-mono); }
+.mp-scale { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-mono); font-size: 10px; color: var(--fg-2); }
+.mp-scale i { width: 14px; height: 8px; display: inline-block; }
+.mp-box { flex: 1; min-height: 160px; position: relative; background: #000; }
+.mp-box svg { display: block; }
+.mp-code { font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; fill: #fff; pointer-events: none; }
+.mp-chg { font-weight: 400; font-size: 9.5px; fill: rgba(255, 255, 255, 0.85); }
+.mp-sec { font-family: var(--font-ui); font-size: 9px; letter-spacing: 0.1em; fill: rgba(242, 210, 122, 0.95); paint-order: stroke; stroke: rgba(0, 0, 0, 0.85); stroke-width: 3px; }
+.mp-info { min-height: 18px; font-size: 11px; color: var(--fg-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mp-info b { color: var(--gold-0); }

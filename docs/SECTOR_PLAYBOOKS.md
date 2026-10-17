@@ -2,7 +2,7 @@
 
 Playbooks are the finance-rule backbone: they decide which metrics exist, which valuation methods may run, and how peers are formed. They are **enforced in the engine** (ARCHITECTURE §5). The UI only reflects what the engine allows.
 
-Status: draft. The YAML files in `/config/playbooks/` are written in M4. This document is their human-readable spec and rationale.
+Status: **implemented in M4** (2026-10-12). The YAML files are in `/config/playbooks/` (`_global`, `financials`, `operating_sectors`, `overlays`, `mapping`); `analytics/trikal_analytics/playbook.py` loads, merges, validates and enforces them. This document remains the human-readable spec and rationale; where the two differ, the YAML is authoritative and DECISIONS ADR-018/019 explain the changes (e.g. loss-making is a `not_primary` overlay, not a prohibition).
 
 ---
 

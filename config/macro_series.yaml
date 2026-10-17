@@ -1,0 +1,120 @@
+# Macro series registry (M5). Every series names its source, unit, frequency and how its `known_at` is set.
+#
+# known_at rules (FORMULAS.md §Macro, ADR-020):
+#   vintage           exact first-release time from the source's vintage history (FRED/ALFRED with an API key)
+#   lag_days: N       imputed: period END + N calendar days at 18:00 IST. Conservative (later than the real release),
+#                     never earlier. Shown in the UI with "≈". Values revised later are loaded as later vintages
+#                     only when the source exposes vintages; otherwise the latest value is stamped with the rule
+#                     (a documented look-ahead risk for revised series: RISKS R-33).
+#   release_day: D    imputed: day D of the month after the period, 17:30 IST (MOSPI CPI calendar: 12th).
+#
+# category drives the Macro desk grouping and the Transmission Engine's top plane.
+version: 1
+
+series:
+  # ---------------- FX, rates, global markets (FRED; daily) ----------------
+  usdinr:
+    name: USD/INR
+    unit: INR per USD
+    freq: D
+    category: fx
+    source: {kind: fred, id: DEXINUS}
+    known: {lag_days: 2}
+    note: Federal Reserve H.10 noon buying rate in New York; India's own reference rate (RBI/FBIL) to be added.
+  brent:
+    name: Brent crude
+    unit: USD per barrel
+    freq: D
+    category: commodities
+    source: {kind: fred, id: DCOILBRENTEU}
+    known: {lag_days: 3}
+    note: EIA Europe Brent spot FOB.
+  ust10y:
+    name: US 10-year Treasury yield
+    unit: percent
+    freq: D
+    category: global_rates
+    source: {kind: fred, id: DGS10}
+    known: {lag_days: 2}
+  fedfunds:
+    name: US Fed funds effective rate
+    unit: percent
+    freq: D
+    category: global_rates
+    source: {kind: fred, id: DFF}
+    known: {lag_days: 2}
+  usd_broad:
+    name: US dollar index (broad, goods & services)
+    unit: index Jan-2006=100
+    freq: D
+    category: fx
+    source: {kind: fred, id: DTWEXBGS}
+    known: {lag_days: 8}
+    note: Published weekly (H.10); the lag covers the weekly release.
+  vix:
+    name: CBOE VIX
+    unit: index
+    freq: D
+    category: global_markets
+    source: {kind: fred, id: VIXCLS}
+    known: {lag_days: 2}
+
+  # ---------------- India (FRED / OECD; monthly) ----------------
+  ind_10y:
+    name: India 10-year government bond yield
+    unit: percent
+    freq: M
+    category: india_rates
+    source: {kind: fred, id: INDIRLTLT01STM}
+    known: {lag_days: 45}
+    note: OECD Main Economic Indicators via FRED; monthly average.
+  ind_cpi_oecd:
+    name: India CPI (all items, OECD)
+    unit: index 2015=100
+    freq: M
+    category: inflation
+    source: {kind: fred, id: INDCPIALLMINMEI}
+    known: {lag_days: 60}
+    note: Long history back to the 1950s; for recent years prefer MOSPI CPI (release-calendar timestamps).
+  ind_interbank:
+    name: India interbank rate (immediate)
+    unit: percent
+    freq: M
+    category: india_rates
+    source: {kind: fred, id: IRSTCI01INM156N}
+    known: {lag_days: 45}
+
+  # ---------------- India (MOSPI; monthly, release calendar) ----------------
+  ind_cpi_general:
+    name: India CPI general (combined, 2012=100)
+    unit: index 2012=100
+    freq: M
+    category: inflation
+    source: {kind: mospi_cpi, base_year: "2012", sector: Combined, group: General Index}
+    known: {release_day: 12}
+    note: MOSPI eSankhyiki API; released around the 12th of the following month at 16:00 IST.
+  ind_cpi_food:
+    name: India CPI food (consumer food price, combined)
+    unit: index 2012=100
+    freq: M
+    category: inflation
+    source: {kind: mospi_cpi, base_year: "2012", sector: Combined, group: Consumer Food Price}
+    known: {release_day: 12}
+
+  # ---------------- Commodities (World Bank Pink Sheet; monthly) ----------------
+  wb_brent:      {name: Brent crude (monthly avg), unit: USD/bbl, freq: M, category: commodities, source: {kind: pinksheet, column: "Crude oil, Brent"}, known: {lag_days: 6}}
+  wb_coal_aus:   {name: Coal, Australian, unit: USD/mt, freq: M, category: commodities, source: {kind: pinksheet, column: "Coal, Australian"}, known: {lag_days: 6}}
+  wb_lng_japan:  {name: LNG, Japan, unit: USD/mmbtu, freq: M, category: commodities, source: {kind: pinksheet, column: "Liquefied natural gas, Japan"}, known: {lag_days: 6}}
+  wb_iron_ore:   {name: Iron ore, cfr spot, unit: USD/dmtu, freq: M, category: commodities, source: {kind: pinksheet, column: "Iron ore, cfr spot"}, known: {lag_days: 6}}
+  wb_copper:     {name: Copper, unit: USD/mt, freq: M, category: commodities, source: {kind: pinksheet, column: "Copper"}, known: {lag_days: 6}}
+  wb_aluminium:  {name: Aluminum, unit: USD/mt, freq: M, category: commodities, source: {kind: pinksheet, column: "Aluminum"}, known: {lag_days: 6}}
+  wb_zinc:       {name: Zinc, unit: USD/mt, freq: M, category: commodities, source: {kind: pinksheet, column: "Zinc"}, known: {lag_days: 6}}
+  wb_gold:       {name: Gold, unit: USD/troy oz, freq: M, category: commodities, source: {kind: pinksheet, column: "Gold"}, known: {lag_days: 6}}
+  wb_silver:     {name: Silver, unit: USD/troy oz, freq: M, category: commodities, source: {kind: pinksheet, column: "Silver"}, known: {lag_days: 6}}
+  wb_urea:       {name: Urea, unit: USD/mt, freq: M, category: commodities, source: {kind: pinksheet, column: "Urea "}, known: {lag_days: 6}}
+  wb_dap:        {name: DAP, unit: USD/mt, freq: M, category: commodities, source: {kind: pinksheet, column: "DAP"}, known: {lag_days: 6}}
+  wb_sugar:      {name: Sugar, world, unit: USD/kg, freq: M, category: commodities, source: {kind: pinksheet, column: "Sugar, world"}, known: {lag_days: 6}}
+  wb_palm_oil:   {name: Palm oil, unit: USD/mt, freq: M, category: commodities, source: {kind: pinksheet, column: "Palm oil"}, known: {lag_days: 6}}
+  wb_cotton:     {name: Cotton, A Index, unit: USD/kg, freq: M, category: commodities, source: {kind: pinksheet, column: "Cotton, A Index"}, known: {lag_days: 6}}
+  wb_rubber:     {name: Rubber, RSS3, unit: USD/kg, freq: M, category: commodities, source: {kind: pinksheet, column: "Rubber, RSS3"}, known: {lag_days: 6}}
+  wb_wheat:      {name: Wheat, US HRW, unit: USD/mt, freq: M, category: commodities, source: {kind: pinksheet, column: "Wheat, US HRW"}, known: {lag_days: 6}}

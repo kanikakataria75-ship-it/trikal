@@ -1,0 +1,190 @@
+# Non-financial sector playbooks (docs/SECTOR_PLAYBOOKS.md §3). Operating metrics that TRIKAL cannot yet derive
+# (volumes, ARPOB, SSSG, order book ...) are listed under `requires` with the source that will provide them.
+# Valuation ids: pe, ev_ebitda, ev_ebitdar, ev_sales, pb, p_abv, p_ev, nav, ev_per_tonne, ev_per_mw, fcf_yield, dcf_fcff, sotp.
+playbooks:
+  - id: generic_nonfinancial
+    label: Non-financial (sector not identified)
+    valuation: {primary: [pe, ev_ebitda], secondary: [pb, ev_sales, dcf_fcff]}
+    peer_group: {min_peers: 8, fallback: generic_nonfinancial}
+    note: "Fallback: only the global rules apply. No sector-specific key metrics are claimed."
+
+  - id: it_services
+    label: IT services
+    key_metrics: [revenue_growth, ebit_margin, roce, fcf_yield, pe]
+    requires: {cc_revenue_growth: "investor presentation (M6)", deal_tcv: "investor presentation (M6)", attrition: "investor presentation (M6)", utilisation: "investor presentation (M6)", top_client_concentration: "annual report (M6)"}
+    valuation: {primary: [pe, fcf_yield], secondary: [ev_ebit]}
+    forbidden: {metrics: [inventory_days]}
+    macro_sensitivities: [{driver: usdinr, channel: "revenue and margin in INR"}, {driver: us_tech_spend, channel: "demand"}]
+    red_flags: [receivable_days_rising, unbilled_revenue_rising, client_concentration]
+
+  - id: pharma
+    label: Pharma
+    key_metrics: [revenue_growth, ebitda_margin, rnd_pct_sales, roce, pe]
+    requires: {us_price_erosion: "concall (M6)", anda_pipeline: "annual report (M6)", usfda_status: "USFDA database (M6)", india_branded_growth: "investor presentation (M6)"}
+    valuation: {primary: [pe, ev_ebitda]}
+    red_flags: [usfda_oai_or_warning_letter_at_key_site, capitalised_rnd_rising]
+
+  - id: hospitals
+    label: Hospitals / diagnostics
+    key_metrics: [ebitda_margin_pre_116, roce, revenue_growth]
+    requires: {arpob: "investor presentation (M6)", occupancy: "investor presentation (M6)", bed_additions: "investor presentation (M6)", payor_mix: "investor presentation (M6)"}
+    valuation: {primary: [ev_ebitda], secondary: [dcf_fcff]}
+    caution: [{metric: pe, reason: "Heavy expansion capex depresses reported earnings; new-unit losses sit inside consolidated profit."}]
+    ebitda_view: pre_ind_as_116
+
+  - id: fmcg
+    label: FMCG
+    key_metrics: [revenue_growth, gross_margin, ebitda_margin, roce, pe]
+    requires: {volume_growth: "concall (M6)", ad_spend_pct: "annual report (M6)", rural_urban_mix: "concall (M6)"}
+    valuation: {primary: [pe], secondary: [dcf_fcff, ev_ebitda]}
+    red_flags: [receivables_rising_vs_sales, trade_inventory_build]
+
+  - id: retail_qsr
+    label: Retail / QSR / consumer services
+    key_metrics: [revenue_growth, ebitda_margin_pre_116, roce]
+    requires: {sssg: "concall (M6)", store_additions: "investor presentation (M6)", revenue_per_sqft: "investor presentation (M6)"}
+    valuation: {primary: [ev_ebitda, ev_sales], secondary: [pe]}
+    caution: [{metric: pe, reason: "Ind AS 116 lease accounting and store roll-out distort earnings; compare EV/EBITDA on a pre-116 basis."}]
+    ebitda_view: pre_ind_as_116
+
+  - id: auto_oem
+    label: Auto OEM
+    key_metrics: [revenue_growth, ebitda_margin, roce, pe]
+    requires: {volumes_by_segment: "SIAM / company releases (M5)", realisation_per_unit: "company releases (M5)", market_share: "SIAM (M5)", dealer_inventory: "FADA (M5)"}
+    valuation: {primary: [pe, ev_ebitda]}
+    macro_sensitivities: [{driver: commodity_costs, channel: "steel, aluminium, precious metals"}, {driver: rates, channel: "financing and demand"}]
+
+  - id: auto_ancillary
+    label: Auto ancillary
+    key_metrics: [revenue_growth, ebitda_margin, roce, pe]
+    requires: {content_per_vehicle: "annual report (M6)", client_concentration: "annual report (M6)", export_share: "annual report (M6)"}
+    valuation: {primary: [pe, ev_ebitda]}
+    red_flags: [single_oem_dependence]
+
+  - id: cement
+    label: Cement
+    key_metrics: [revenue_growth, ebitda_margin, roce, net_debt_ebitda]
+    requires: {capacity: "company releases (M6)", utilisation: "company releases (M6)", realisation_per_tonne: "concall (M6)", cost_per_tonne: "concall (M6)", ebitda_per_tonne: "concall (M6)", volume: "company releases (M6)"}
+    valuation: {primary: [ev_per_tonne, ev_ebitda]}
+    not_primary: [pe]
+    cyclical: true
+    cycle: {type: capacity_demand_cycle, indicators: [pet_coke_price, housing_and_infra_capex]}
+    red_flags: [capacity_additions_outpacing_demand, regional_price_wars]
+
+  - id: metals_mining
+    label: Metals & mining
+    key_metrics: [ebitda_margin, net_debt_ebitda, roce, pb]
+    requires: {spreads: "commodity prices (M5)", cost_curve_position: "company data (M6)", volumes: "company releases (M6)"}
+    valuation: {primary: [ev_ebitda_mid_cycle, pb]}
+    not_primary: [pe]
+    cyclical: true
+    caution: [{metric: pe, reason: "A low P/E at peak margins is the classic cyclical trap; value on mid-cycle EBITDA."}]
+    red_flags: [leverage_at_peak, acquisitions_at_peak]
+
+  - id: oil_gas_omc
+    label: "Oil & gas: refining and marketing"
+    key_metrics: [ebitda_margin, roce, net_debt_ebitda]
+    requires: {grm: "company releases (M6)", marketing_margins: "PPAC (M5)", throughput: "PPAC (M5)"}
+    valuation: {primary: [ev_ebitda], secondary: [sotp]}
+    caution: [{metric: pe, reason: "Single-year earnings include inventory gains/losses and regulated-price effects."}]
+    cyclical: true
+    red_flags: [under_recoveries, inventory_gain_dependence]
+
+  - id: oil_gas_upstream
+    label: "Oil & gas: upstream"
+    key_metrics: [ebitda_margin, roce]
+    requires: {realisations: "company releases (M6)", production: "company releases (M6)", reserves: "annual report (M6)"}
+    valuation: {primary: [ev_ebitda], secondary: [pe]}
+    cyclical: true
+    red_flags: [windfall_tax_and_pricing_interventions]
+
+  - id: oil_gas_cgd
+    label: City gas distribution
+    key_metrics: [ebitda_margin, roce, revenue_growth]
+    requires: {volumes: "company releases (M6)", ebitda_per_scm: "concall (M6)", gas_allocation: "PPAC (M5)"}
+    valuation: {primary: [pe, dcf_fcff]}
+
+  - id: power_regulated
+    label: "Power: generation, T&D, regulated"
+    key_metrics: [roe, pb, net_debt_ebitda, revenue_growth]
+    requires: {plf: "CEA (M5)", regulated_equity: "annual report (M6)", discom_receivable_days: "annual report (M6)"}
+    valuation: {primary: [pb, dcf_fcff]}
+    red_flags: [receivable_days_rising]
+
+  - id: renewables
+    label: Renewables
+    key_metrics: [ebitda_margin, net_debt_ebitda, revenue_growth]
+    requires: {mw_operational: "company releases (M6)", cuf: "company releases (M6)", tariff: "company releases (M6)", mw_pipeline: "company releases (M6)"}
+    valuation: {primary: [ev_per_mw, dcf_fcff]}
+    red_flags: [short_term_debt_funding_long_assets]
+
+  - id: real_estate
+    label: Real estate
+    key_metrics: [net_debt_ebitda, revenue_growth, pb]
+    requires: {pre_sales: "company releases (M6)", collections: "company releases (M6)", land_bank: "annual report (M6)"}
+    valuation: {primary: [nav]}
+    forbidden: {metrics: [pe]}
+    red_flags: [collections_below_pre_sales]
+    forbidden_reason: "Ind AS 115 revenue recognition makes reported earnings lumpy; developers are valued on NAV."
+
+  - id: capital_goods_epc_defence
+    label: Capital goods / EPC / defence
+    key_metrics: [revenue_growth, ebitda_margin, roce, receivable_days, inventory_days]
+    requires: {order_book: "concall / investor presentation (M6)", book_to_bill: "concall (M6)", execution_rate: "concall (M6)"}
+    valuation: {primary: [pe, ev_ebitda]}
+    red_flags: [receivables_and_unbilled_rising, low_margin_order_intake]
+
+  - id: chemicals_specialty
+    label: "Chemicals: specialty"
+    key_metrics: [revenue_growth, ebitda_margin, roce, pe]
+    requires: {product_mix: "annual report (M6)", capacity_utilisation: "concall (M6)", customer_contracts: "concall (M6)"}
+    valuation: {primary: [pe, ev_ebitda]}
+    red_flags: [customer_concentration, china_price_pressure]
+
+  - id: chemicals_commodity
+    label: "Chemicals: commodity"
+    key_metrics: [ebitda_margin, net_debt_ebitda, roce]
+    requires: {spreads: "commodity prices (M5)", capacity_utilisation: "concall (M6)"}
+    valuation: {primary: [ev_ebitda_mid_cycle], secondary: [pb]}
+    not_primary: [pe]
+    cyclical: true
+
+  - id: telecom
+    label: Telecom
+    key_metrics: [ebitda_margin, net_debt_ebitda, capex_to_sales]
+    requires: {arpu: "company releases (M6)", subscribers: "TRAI (M5)", churn: "company releases (M6)"}
+    valuation: {primary: [ev_ebitda]}
+    not_primary: [pe]
+    ebitda_view: pre_ind_as_116
+    red_flags: [deferred_spectrum_dues]
+
+  - id: aviation
+    label: Aviation
+    key_metrics: [net_debt_ebitda, revenue_growth]
+    requires: {rask: "company releases (M6)", cask: "company releases (M6)", load_factor: "DGCA (M5)", fuel_cost_share: "annual report (M6)"}
+    valuation: {primary: [ev_ebitdar]}
+    not_primary: [pe]
+    ebitda_view: ebitdar
+    cyclical: true
+    red_flags: [negative_net_worth, lease_liabilities]
+
+  - id: hotels
+    label: Hotels
+    key_metrics: [ebitda_margin, net_debt_ebitda, revenue_growth]
+    requires: {revpar: "company releases (M6)", arr: "company releases (M6)", occupancy: "company releases (M6)"}
+    valuation: {primary: [ev_ebitda]}
+    cyclical: true
+
+  - id: logistics
+    label: Logistics / transport
+    key_metrics: [ebitda_margin, roce, revenue_growth]
+    requires: {volumes: "company releases (M6)", realisation: "company releases (M6)"}
+    valuation: {primary: [ev_ebitda]}
+
+  - id: agri_fert_sugar
+    label: Agri / fertilisers / sugar
+    key_metrics: [ebitda_margin, receivable_days, revenue_growth]
+    requires: {subsidy_receivables: "annual report (M6)", monsoon: "IMD (M5)", cane_price: "government notifications (M5)"}
+    valuation: {primary: [ev_ebitda, pe]}
+    cyclical: true
+    red_flags: [subsidy_receivable_days_rising]

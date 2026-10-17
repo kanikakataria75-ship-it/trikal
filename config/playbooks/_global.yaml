@@ -1,0 +1,30 @@
+# Vocabulary shared by every playbook, and the global rules (docs/SECTOR_PLAYBOOKS.md §2).
+# A playbook may forbid a single metric/method or a whole group. Groups are expanded when the playbook loads.
+version: 1
+
+metric_groups:
+  ebitda_based: [ebitda, ebitda_margin, ev_ebitda, ev_ebitdar, net_debt_ebitda, interest_coverage_ebitda]
+  ev_based: [ev, ev_ebitda, ev_ebitdar, ev_sales, ev_per_tonne, ev_per_mw]
+  leverage_nonfinancial: [debt_to_equity, net_debt, net_debt_ebitda, current_ratio, interest_coverage,
+                          interest_coverage_ebitda]
+  working_capital: [inventory_days, receivable_days, payable_days, cash_conversion_cycle]
+  distress_nonfinancial: [altman_z]
+  earnings_multiple: [pe]
+
+method_groups:
+  ev_methods: [multiples_ev, ev_per_tonne, ev_per_mw]
+  fcff_methods: [dcf_fcff, reverse_dcf_fcff]
+
+# Rules applied to every company whatever its playbook (enforced in metrics.py / lab.py).
+global_rules:
+  - {id: G1, text: "A multiple whose denominator is <= 0 is Undefined, never a negative number (P/E, EV/EBITDA, P/B)."}
+  - {id: G2, text: "Financials never get EBITDA, EV, leverage or working-capital metrics (inherited by the financials playbooks)."}
+  - {id: G3, text: "Cyclicals: a low P/E at a margin above the 80th percentile of the company's own history is flagged cyclical_peak_trap."}
+  - {id: G4, text: "Every multiple is reported with its own-history percentile and its peer percentile; a bare multiple is not a valid answer."}
+  - {id: G5, text: "Holding companies are valued by sum-of-the-parts with a holdco discount scenario, never by consolidated P/E alone."}
+  - {id: G6, text: "A ratio never mixes standalone and consolidated inputs."}
+  - {id: G10, text: "Only trailing numbers are computed. Forward numbers come only from management guidance or user scenarios, labelled as such."}
+  - {id: G11, text: "Illiquid names are flagged; their quoted prices are excluded from peer valuation percentiles."}
+
+# When the playbook is unknown we do not guess a sector rule; this one only applies the global rules.
+fallback_playbook: generic_nonfinancial

@@ -1,0 +1,414 @@
+# Canonical line items and where each one comes from (priority order: first source that has a value wins).
+#
+# Concept names are the NSE/BSE XBRL taxonomy elements (post-2017 filings) or `html:<slug>` for the old
+# results pages (2008-2017). The lineage of every value (concept, filing, broadcast time) is returned
+# with it. A line item that is not meaningful for a sector (EBITDA for banks, ...) is not defined here;
+# sector rules live in config/playbooks (M4).
+#
+# kind: flow = needs a duration (months), stock = point in time (balance sheet).
+# Money is INR. Display scaling (crore) is a UI concern.
+version: 1
+
+line_items:
+  # ---- Income statement (non-financial and NBFC Ind AS) --------------------------------------------
+  revenue_from_operations:
+    statement: income
+    kind: flow
+    sources:
+      - {concept: RevenueFromOperations}
+      - {concept: "html:total_income_from_operations", note: "pre-Ind-AS pages: net of excise duty"}
+      - {concept: "html:net_sales_income_from_operations", note: "net sales only, excludes other operating income"}
+      - {concept: "html:net_sales_income_from_operation"}
+  other_income:
+    statement: income
+    kind: flow
+    sources: [{concept: OtherIncome}, {concept: "html:other_income"}]
+  total_income:
+    statement: income
+    kind: flow
+    sources: [{concept: Income}, {concept: "html:total_income"}]
+  cost_of_materials:
+    statement: income
+    kind: flow
+    sources:
+      - {concept: CostOfMaterialsConsumed}
+      - {concept: "html:cost_of_materials_consumed"}
+      - {concept: "html:consumption_of_raw_materials"}
+  purchases_of_traded_goods:
+    statement: income
+    kind: flow
+    sources:
+      - {concept: PurchasesOfStockInTrade}
+      - {concept: "html:purchases_of_stock_in_trade"}
+      - {concept: "html:purchase_of_traded_goods"}
+  change_in_inventories:
+    statement: income
+    kind: flow
+    sources:
+      - {concept: ChangesInInventoriesOfFinishedGoodsWorkInProgressAndStockInTrade}
+      - {concept: "html:changes_in_inventories_of_finished_goods_work_in_progress_and_stock_in_trade"}
+      - {concept: "html:increase_decrease_in_stock_in_trade_and_work_in_progress"}
+  employee_expense:
+    statement: income
+    kind: flow
+    sources:
+      - {concept: EmployeeBenefitExpense}
+      - {concept: EmployeesCost}
+      - {concept: "html:employee_benefits_expense"}
+      - {concept: "html:employees_cost"}
+  depreciation_amortisation:
+    statement: income
+    kind: flow
+    sources:
+      - {concept: DepreciationDepletionAndAmortisationExpense}
+      - {concept: "html:depreciation_and_amortisation_expense"}
+      - {concept: "html:depreciation"}
+  other_expenses:
+    statement: income
+    kind: flow
+    sources: [{concept: OtherExpenses}, {concept: "html:other_expenses"}, {concept: "html:other_expenditure"}]
+  total_expenses:
+    statement: income
+    kind: flow
+    sources: [{concept: Expenses}, {concept: "html:total_expenses"}, {concept: "html:total_expenditure"}]
+  finance_costs:
+    statement: income
+    kind: flow
+    sources: [{concept: FinanceCosts}, {concept: "html:finance_costs"}, {concept: "html:interest"}]
+  exceptional_items:
+    statement: income
+    kind: flow
+    sources: [{concept: ExceptionalItemsBeforeTax}, {concept: ExceptionalItems}, {concept: "html:exceptional_items"}]
+  profit_before_exceptional_and_tax:
+    statement: income
+    kind: flow
+    sources: [{concept: ProfitBeforeExceptionalItemsAndTax}, {concept: "html:profit_after_finance_costs_but_before_exceptional_items"},
+              {concept: "html:profit_from_ordinary_activities_after_finance_costs_but_before_exceptional_items"},
+              {concept: "html:profit_after_interest_but_before_exceptional_items"}]
+  profit_before_tax:
+    statement: income
+    kind: flow
+    sources:
+      - {concept: ProfitBeforeTax}
+      - {concept: ProfitLossFromOrdinaryActivitiesBeforeTax}
+      - {concept: "html:profit_from_ordinary_activities_before_tax"}
+      - {concept: "html:profit_loss_from_ordinary_activities_before_tax"}
+  tax_expense:
+    statement: income
+    kind: flow
+    sources: [{concept: TaxExpense}, {concept: "html:tax_expense"}]
+  profit_after_tax:      # net profit for the period, before minority interest where disclosed
+    statement: income
+    kind: flow
+    sources:
+      - {concept: ProfitLossForPeriod}
+      - {concept: ProfitLossForThePeriod}
+      - {concept: "html:net_profit_for_the_period"}
+      - {concept: "html:net_profit_loss_for_the_period"}
+  profit_attributable_to_owners:
+    statement: income
+    kind: flow
+    sources:
+      - {concept: ProfitOrLossAttributableToOwnersOfParent}
+      - {concept: ProfitLossAfterTaxesMinorityInterestAndShareOfProfitLossOfAssociates}
+      - {concept: "html:consolidated_net_profit_loss_for_the_period"}
+      - {concept: "html:net_profit_after_taxes_minority_interest_and_share_of_profit_of_associates"}
+  profit_attributable_to_minorities:
+    statement: income
+    kind: flow
+    sources: [{concept: ProfitOrLossAttributableToNonControllingInterests}, {concept: ProfitLossOfMinorityInterest},
+              {concept: "html:minority_interest"}]
+  other_comprehensive_income:
+    statement: income
+    kind: flow
+    sources: [{concept: OtherComprehensiveIncomeNetOfTaxes}, {concept: "html:other_comprehensive_income"}]
+  total_comprehensive_income:
+    statement: income
+    kind: flow
+    sources: [{concept: ComprehensiveIncomeForThePeriod}, {concept: "html:total_comprehensive_income"}]
+  eps_basic:
+    statement: income
+    kind: flow
+    sources:
+      - {concept: BasicEarningsLossPerShareFromContinuingAndDiscontinuedOperations}
+      - {concept: "html:earnings_per_share_basic"}
+      - {concept: "html:basic_eps_after_extraordinary_items"}
+  eps_diluted:
+    statement: income
+    kind: flow
+    sources:
+      - {concept: DilutedEarningsLossPerShareFromContinuingAndDiscontinuedOperations}
+      - {concept: "html:earnings_per_share_diluted"}
+      - {concept: "html:diluted_eps_after_extraordinary_items"}
+  paid_up_equity_capital:
+    statement: income
+    kind: flow
+    sources: [{concept: PaidUpValueOfEquityShareCapital}, {concept: "html:paid_up_equity_share_capital"}]
+  face_value:
+    statement: income
+    kind: flow
+    sources: [{concept: FaceValueOfEquityShareCapital}, {concept: "html:face_value"}]
+
+  # ---- Banks (family BANKING; standalone P&L is in the results XBRL, not a full balance sheet) ----------
+  interest_earned:
+    statement: bank
+    kind: flow
+    sources: [{concept: InterestEarned}]
+  interest_expended:
+    statement: bank
+    kind: flow
+    sources: [{concept: InterestExpended}]
+  bank_operating_profit_before_provisions:
+    statement: bank
+    kind: flow
+    sources: [{concept: OperatingProfitBeforeProvisionAndContingencies}]
+  bank_provisions:
+    statement: bank
+    kind: flow
+    sources: [{concept: ProvisionsOtherThanTaxAndContingencies}]
+  # Banks file asset quality on the STANDALONE statement; the consolidated block carries a placeholder 0.0 meaning
+  # "not reported here". prefer_basis + zero_is_missing make sure that placeholder is never shown as a real zero.
+  gross_npa_amount:
+    statement: bank
+    kind: flow
+    prefer_basis: standalone
+    zero_is_missing: true
+    sources: [{concept: GrossNonPerformingAssets}]
+  net_npa_amount:
+    statement: bank
+    kind: flow
+    prefer_basis: standalone
+    zero_is_missing: true
+    sources: [{concept: NonPerformingAssets}]
+  gross_npa_pct:
+    statement: bank
+    kind: flow
+    prefer_basis: standalone
+    zero_is_missing: true
+    sources: [{concept: PercentageOfGrossNpa}]        # a fraction (0.0117 = 1.17%)
+  net_npa_pct:
+    statement: bank
+    kind: flow
+    prefer_basis: standalone
+    zero_is_missing: true
+    sources: [{concept: PercentageOfNpa}]
+  dscr_reported:
+    statement: ratio
+    kind: flow
+    zero_is_missing: true
+    sources: [{concept: DebtServiceCoverageRatio}]
+  iscr_reported:
+    statement: ratio
+    kind: flow
+    zero_is_missing: true
+    sources: [{concept: InterestServiceCoverageRatio}]
+  cet1_ratio:
+    statement: bank
+    kind: flow
+    prefer_basis: standalone
+    zero_is_missing: true
+    sources: [{concept: CET1Ratio}]
+  at1_ratio:
+    statement: bank
+    kind: flow
+    prefer_basis: standalone
+    zero_is_missing: true
+    sources: [{concept: AdditionalTier1Ratio}]
+  return_on_assets_reported:
+    statement: bank
+    kind: flow
+    prefer_basis: standalone
+    zero_is_missing: true
+    sources: [{concept: ReturnOnAssets}]
+  bank_operating_expenses:
+    statement: bank
+    kind: flow
+    sources: [{concept: OperatingExpenses}]
+  bank_advances:
+    statement: bank
+    kind: stock
+    sources: [{concept: Advances}]
+  bank_deposits:
+    statement: bank
+    kind: stock
+    sources: [{concept: Deposits}]
+  bank_investments:
+    statement: bank
+    kind: stock
+    sources: [{concept: Investments}]
+  bank_borrowings:
+    statement: bank
+    kind: stock
+    sources: [{concept: Borrowings}]
+
+  # ---- Balance sheet (half-yearly and annual filings) ------------------------------------------------
+  total_assets:
+    statement: balance
+    kind: stock
+    sources: [{concept: Assets}, {concept: CapitalAndLiabilities}]
+  total_liabilities:
+    statement: balance
+    kind: stock
+    sources: [{concept: Liabilities}]
+  total_equity:
+    statement: balance
+    kind: stock
+    sources: [{concept: Equity}]
+  equity_owners:
+    statement: balance
+    kind: stock
+    # banks have no "equity" line: shareholders' funds = share capital + reserves and surplus (derived, labelled sum:)
+    sources: [{concept: EquityAttributableToOwnersOfParent}, {sum: [Capital, ReservesAndSurplus]}]
+  equity_share_capital:
+    statement: balance
+    kind: stock
+    sources: [{concept: EquityShareCapital}]
+  other_equity:
+    statement: balance
+    kind: stock
+    sources: [{concept: OtherEquity}, {concept: ReservesAndSurplus}]
+  non_controlling_interest:
+    statement: balance
+    kind: stock
+    sources: [{concept: NonControllingInterest}]
+  current_assets:
+    statement: balance
+    kind: stock
+    sources: [{concept: CurrentAssets}]
+  non_current_assets:
+    statement: balance
+    kind: stock
+    sources: [{concept: NoncurrentAssets}]
+  current_liabilities:
+    statement: balance
+    kind: stock
+    sources: [{concept: CurrentLiabilities}]
+  non_current_liabilities:
+    statement: balance
+    kind: stock
+    sources: [{concept: NoncurrentLiabilities}]
+  borrowings_current:
+    statement: balance
+    kind: stock
+    sources: [{concept: BorrowingsCurrent}]
+  borrowings_non_current:
+    statement: balance
+    kind: stock
+    sources: [{concept: BorrowingsNoncurrent}]
+  cash_and_equivalents:
+    statement: balance
+    kind: stock
+    sources: [{concept: CashAndCashEquivalents}]
+  other_bank_balances:
+    statement: balance
+    kind: stock
+    sources: [{concept: BankBalanceOtherThanCashAndCashEquivalents}]
+  current_investments:
+    statement: balance
+    kind: stock
+    sources: [{concept: CurrentInvestments}]
+  non_current_investments:
+    statement: balance
+    kind: stock
+    sources: [{concept: NoncurrentInvestments}]
+  inventories:
+    statement: balance
+    kind: stock
+    sources: [{concept: Inventories}]
+  trade_receivables_current:
+    statement: balance
+    kind: stock
+    sources: [{concept: TradeReceivablesCurrent}, {concept: TradeReceivables}]
+  trade_payables_current:
+    statement: balance
+    kind: stock
+    sources: [{concept: TradePayablesCurrent}]
+  property_plant_equipment:
+    statement: balance
+    kind: stock
+    sources: [{concept: PropertyPlantAndEquipment}]
+  capital_work_in_progress:
+    statement: balance
+    kind: stock
+    sources: [{concept: CapitalWorkInProgress}]
+  goodwill:
+    statement: balance
+    kind: stock
+    sources: [{concept: Goodwill}]
+  other_intangible_assets:
+    statement: balance
+    kind: stock
+    sources: [{concept: OtherIntangibleAssets}]
+  loans_current:
+    statement: balance
+    kind: stock
+    sources: [{concept: LoansCurrent}]
+  loans_non_current:
+    statement: balance
+    kind: stock
+    sources: [{concept: LoansNoncurrent}, {concept: Loans}]
+  provisions_current:
+    statement: balance
+    kind: stock
+    sources: [{concept: ProvisionsCurrent}]
+  provisions_non_current:
+    statement: balance
+    kind: stock
+    sources: [{concept: ProvisionsNoncurrent}]
+
+  # ---- Cash flow (annual = 12 months, half-yearly = 6 months, year-to-date columns) ---------------------
+  cash_flow_operations:
+    statement: cashflow
+    kind: flow
+    sources: [{concept: CashFlowsFromUsedInOperatingActivities}]
+  cash_flow_investing:
+    statement: cashflow
+    kind: flow
+    sources: [{concept: CashFlowsFromUsedInInvestingActivities}]
+  cash_flow_financing:
+    statement: cashflow
+    kind: flow
+    sources: [{concept: CashFlowsFromUsedInFinancingActivities}]
+  net_change_in_cash:
+    statement: cashflow
+    kind: flow
+    sources: [{concept: IncreaseDecreaseInCashAndCashEquivalents}]
+  capex_ppe:
+    statement: cashflow
+    kind: flow
+    note: "outflow, reported negative"
+    sources: [{concept: PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities}]
+  capex_intangibles:
+    statement: cashflow
+    kind: flow
+    sources: [{concept: PurchaseOfIntangibleAssetsClassifiedAsInvestingActivities}]
+  dividends_paid:
+    statement: cashflow
+    kind: flow
+    sources: [{concept: DividendsPaidClassifiedAsFinancingActivities}]
+  borrowings_raised:
+    statement: cashflow
+    kind: flow
+    sources: [{concept: ProceedsFromBorrowingsClassifiedAsFinancingActivities}]
+  borrowings_repaid:
+    statement: cashflow
+    kind: flow
+    sources: [{concept: RepaymentsOfBorrowingsClassifiedAsFinancingActivities}]
+  shares_issued_proceeds:
+    statement: cashflow
+    kind: flow
+    sources: [{concept: ProceedsFromIssuingSharesClassifiedAsFinancingActivities}]
+
+  # ---- Ownership facts carried by the old results pages (validated; see html_results.py) --------------
+  public_shares:
+    statement: ownership
+    kind: stock
+    sources: [{concept: "html:public_shares"}]
+  promoter_pledged_shares:
+    statement: ownership
+    kind: stock
+    sources: [{concept: "html:promoter_pledged_shares"}]
+  promoter_nonencumbered_shares:
+    statement: ownership
+    kind: stock
+    sources: [{concept: "html:promoter_nonencumbered_shares"}]

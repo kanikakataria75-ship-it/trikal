@@ -21,3 +21,8 @@ secrets/
 .hypothesis/
 .ruff_cache/
 *.egg-info/
+web/.next/
+data/cache/
+web/next-env.d.ts
+web/tsconfig.tsbuildinfo
+!.env.example

@@ -1,0 +1,2 @@
+config/scores/*.yaml -text
+*.bat text eol=crlf
