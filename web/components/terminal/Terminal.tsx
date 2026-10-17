@@ -13,6 +13,7 @@ import { Wordmark } from "@/components/ui/Logo";
 import ModeSwitch from "@/components/ui/ModeSwitch";
 import TimeSpine from "@/components/ui/TimeSpine";
 import CommandPalette from "./CommandPalette";
+import HeaderTools from "./HeaderTools";
 import { DES, EVT, GP, HELP } from "./PanelsA";
 import { CR, DUP, FA } from "./PanelsB";
 import { DCF, OWN, RV, WC } from "./PanelsC";
@@ -30,6 +31,7 @@ import "./terminal.css";
 import "./map.css";
 import "./pro.css";
 import "./tx.css";
+import "./tools.css";
 
 type P = { pin?: string };
 const wrap = (C: React.ComponentType<{ params: P }>) => function Panel(props: IDockviewPanelProps<P>) { return <C params={props.params ?? {}} />; };
@@ -193,6 +195,7 @@ function Header() {
           <span className={`t-live mono ${live.quote.change_pct >= 0 ? "pos" : "neg"}`}>{live.quote.ltp.toLocaleString("en-IN", { maximumFractionDigits: 2 })} {live.quote.change_pct >= 0 ? "▲" : "▼"}{Math.abs(live.quote.change_pct * 100).toFixed(2)}%{live.market_open ? <i className="live-dot" /> : null}</span>
         )}
       </div>
+      <HeaderTools />
       <div className="t-head-right">
         <ModeSwitch />
         {asOf !== "NOW" ? (

@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AreaSeries, CandlestickSeries, ColorType, CrosshairMode, HistogramSeries, PriceScaleMode, createChart, createSeriesMarkers, type IChartApi, type ISeriesApi, type SeriesType, type UTCTimestamp } from "lightweight-charts";
 import ChartDraw from "./ChartDraw";
+import { AlertButton, WatchButton } from "./ListButtons";
 import { useCompany, useLive, usePrices, useTimeline, type Streak } from "@/lib/api";
 import { dmy, dmyTime, indianGroup, METRIC_LABEL } from "@/lib/format";
 import { FUNCTIONS } from "@/lib/commands";
@@ -69,7 +70,9 @@ export function DES({ params }: PanelProps) {
                 <div className="des-id">
                   <div className="des-code mono">{d.code}<span className="des-ex">{d.listings.map((l) => l.exchange).filter((v, i, a) => a.indexOf(v) === i).join(" · ")}</span>
                     <a className="des-pdf" href={`/api/company/${encodeURIComponent(d.code)}/report.pdf?as_of=${encodeURIComponent(asOf)}`} target="_blank" rel="noreferrer" title="One-page research report as of this date (PDF)">PDF report</a>
-                    <a className="des-pdf" href={`/compare?codes=${encodeURIComponent(d.code)},&asof=${encodeURIComponent(asOf)}`} title="Compare with other companies (add symbols there)">Compare</a></div>
+                    <a className="des-pdf" href={`/compare?codes=${encodeURIComponent(d.code)},&asof=${encodeURIComponent(asOf)}`} title="Compare with other companies (add symbols there)">Compare</a>
+                    <WatchButton code={d.code} />
+                    <AlertButton code={d.code} price={d.last_price?.close ?? null} /></div>
                   <h2 className="des-name">{d.name}</h2>
                   <div className="des-chips">
                     {d.active ? <Chip tone="pos">trading</Chip> : <Chip tone="neg">not trading as of {asOf === "NOW" ? "today" : dmy(asOf)}</Chip>}

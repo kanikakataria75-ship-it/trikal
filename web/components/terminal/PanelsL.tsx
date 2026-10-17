@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, ApiError, type Envelope } from "@/lib/api";
+import { useAlertFeed, usePriceAlerts, useWatch } from "@/lib/lists";
 import { dmy, indianGroup, inr, todayIST } from "@/lib/format";
 import { useT, workspace } from "@/lib/store";
 import { usePanelAsOf } from "./common";
@@ -28,59 +29,58 @@ const write = (k: string, v: unknown) => { try { localStorage.setItem(k, JSON.st
 const open = (code: string, setCode: (c: string) => void) => { setCode(code); workspace.open("DES"); };
 
 /* ───────────────────────────────────────────── WL ───────────────────────────────────────────── */
-const WKEY = "trikal.watch.v1";
-
 export function WL(_: PanelProps) {
   const setCode = useT((s) => s.setCode);
-  const [codes, setCodes] = useState<string[]>([]);
-  const [seen, setSeen] = useState<string>("");
+  const [w, setW] = useWatch();
+  const [levels, setLevels] = usePriceAlerts();
   const [draft, setDraft] = useState("");
-  const [notify, setNotify] = useState(false);
-  const loaded = useRef(false);
-  useEffect(() => {
-    const s = read<{ codes: string[]; seen: string; notify?: boolean }>(WKEY, { codes: [], seen: todayIST() });
-    setCodes(s.codes); setSeen(s.seen || todayIST()); setNotify(!!s.notify); loaded.current = true;
-  }, []);
-  useEffect(() => { if (loaded.current) write(WKEY, { codes, seen, notify }); }, [codes, seen, notify]);
-  const q = useQuery({
-    queryKey: ["watch", codes.join(","), seen], enabled: codes.length > 0 && !!seen, refetchInterval: 300_000, retry: false,
-    queryFn: () => api<Watch>(`/api/watch?as_of=NOW&codes=${encodeURIComponent(codes.join(","))}&since=${seen}`),
-  });
-  const alerts = q.data?.alerts ?? [];
+  const feed = useAlertFeed();
+  const alerts = feed.all;
   const told = useRef(0);
   useEffect(() => {
-    if (!notify || typeof Notification === "undefined" || Notification.permission !== "granted" || alerts.length <= told.current) return;
+    if (!w.notify || typeof Notification === "undefined" || Notification.permission !== "granted" || alerts.length <= told.current) return;
     new Notification("TRIKAL", { body: alerts.slice(told.current, told.current + 3).map((a) => a.text).join("\n") });
     told.current = alerts.length;
-  }, [alerts, notify]);
+  }, [alerts, w.notify]);
   const enableNotify = async () => {
     if (typeof Notification === "undefined") return;
     const p = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
-    setNotify(p === "granted");
+    setW({ notify: p === "granted" });
   };
-  const add = (e: React.FormEvent) => { e.preventDefault(); const c = draft.trim().toUpperCase(); if (c && !codes.includes(c)) setCodes([...codes, c]); setDraft(""); };
-  const err = q.error instanceof ApiError ? q.error.message : null;
+  const add = (e: React.FormEvent) => { e.preventDefault(); const c = draft.trim().toUpperCase(); if (c && !w.codes.includes(c)) setW({ codes: [...w.codes, c] }); setDraft(""); };
+  const err = feed.q.error instanceof ApiError ? feed.q.error.message : null;
+  const rows = feed.items.filter((i) => w.codes.includes(i.code));
   return (
     <div className="t-panel wl">
       <form className="wl-bar" onSubmit={add}>
         <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="add a symbol (TCS, HDFCBANK ...)" spellCheck={false} />
         <button type="submit">Add</button>
-        <button type="button" className="ghost" onClick={enableNotify} title="Desktop notifications while this page is open">{notify ? "🔔 on" : "🔔 notify me"}</button>
+        <button type="button" className="ghost" onClick={enableNotify} title="Desktop notifications while this page is open">{w.notify ? "🔔 notifications on" : "🔔 notify me"}</button>
       </form>
       {alerts.length > 0 && (
         <div className="wl-alerts">
-          <div className="wl-ah"><b>{alerts.length} alert{alerts.length > 1 ? "s" : ""}</b> since {dmy(seen)}<button onClick={() => { setSeen(todayIST()); told.current = 0; }}>mark as read</button></div>
+          <div className="wl-ah"><b>{alerts.length} alert{alerts.length > 1 ? "s" : ""}</b> since {dmy(w.seen)}<button onClick={() => { setW({ seen: todayIST() }); told.current = 0; }}>mark as read</button></div>
           {alerts.map((a, i) => <div key={i} className={`wl-a ${a.severity}`} onClick={() => open(a.code, setCode)}>{a.text}</div>)}
         </div>
       )}
+      {levels.length > 0 && (
+        <div className="wl-levels">
+          <span className="t-k">Your price alerts</span>
+          {levels.map((a) => {
+            const p = feed.items.find((i) => i.code === a.code)?.price ?? null;
+            const hit = p !== null && (a.op === "above" ? p >= a.price : p <= a.price);
+            return <span key={a.id} className={`wl-lv ${hit ? "hit" : ""}`}><b className="mono">{a.code}</b> {a.op} ₹{indianGroup(a.price, 2)}{p !== null && <small> · now ₹{indianGroup(p, 2)}</small>}<i onClick={() => setLevels(levels.filter((x) => x.id !== a.id))} title="remove">×</i></span>;
+          })}
+        </div>
+      )}
       {err && <div className="tx-err">{err}</div>}
-      {codes.length === 0 && <div className="t-dim">Your watchlist is empty. Add a few symbols; alerts appear here when results come out, a score moves, or a price moves a lot.</div>}
-      {q.data && (
+      {w.codes.length === 0 && <div className="t-dim">Your watchlist is empty. Press ☆ Watch on any company, or add symbols above. Alerts appear when results come out, a score moves, or a price moves a lot.</div>}
+      {w.codes.length > 0 && (
         <table className="t-table wl-tab">
           <thead><tr><th>Company</th><th>Price</th><th>1d</th><th>52-week range</th><th>1y</th><th>Score</th><th>Last results</th><th /></tr></thead>
           <tbody>
-            {q.data.items.map((it) => it.error ? (
-              <tr key={it.code}><td><b className="mono">{it.code}</b></td><td colSpan={6} className="t-dim">{it.error}</td><td><i className="wl-x" onClick={() => setCodes(codes.filter((c) => c !== it.code))}>×</i></td></tr>
+            {rows.map((it) => it.error ? (
+              <tr key={it.code}><td><b className="mono">{it.code}</b></td><td colSpan={6} className="t-dim">{it.error}</td><td><i className="wl-x" onClick={() => setW({ codes: w.codes.filter((c) => c !== it.code) })}>×</i></td></tr>
             ) : (
               <tr key={it.code} onClick={() => open(it.code, setCode)}>
                 <td><b className="mono">{it.code}</b> <span className="t-dim">{it.name}</span></td>
@@ -90,13 +90,13 @@ export function WL(_: PanelProps) {
                 <td className={`mono ${tone(it.return_1y)}`}>{pc(it.return_1y, 0)}</td>
                 <td className="mono">{it.score === null ? "—" : <>{it.score.toFixed(0)}{it.score_prev !== null && Math.abs(it.score - it.score_prev) >= 0.5 && <small className={tone(it.score - it.score_prev)}> {it.score > it.score_prev ? "▲" : "▼"}{Math.abs(it.score - it.score_prev).toFixed(0)}</small>}</>}</td>
                 <td className="t-dim mono">{it.last_results ? dmy(it.last_results.known_at.slice(0, 10)) : "—"}</td>
-                <td><i className="wl-x" onClick={(e) => { e.stopPropagation(); setCodes(codes.filter((c) => c !== it.code)); }}>×</i></td>
+                <td><i className="wl-x" onClick={(e) => { e.stopPropagation(); setW({ codes: w.codes.filter((c) => c !== it.code) }); }}>×</i></td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
-      <div className="t-foot">{q.data?.note ?? "Kept in this browser only."} Scores are KASAUTI v1 rankings, not advice.</div>
+      <div className="t-foot">{feed.q.data?.note ?? "Kept in this browser only."} Scores are KASAUTI v1 rankings, not advice.</div>
     </div>
   );
 }

@@ -231,3 +231,5 @@ No LLM budget, so the M6 gaps are filled from what the exchange already files in
 - `WL` watchlist with alerts (results, score moves, price moves, 52-week extremes, ex-dates, board meetings), `PORT` portfolio valuation; both kept in the browser, `/api/watch`, `/api/portfolio`.
 - `CAL` calendar from the exchange's board-meeting intimations (`trikal fetch-calendar`), shown as announced at the as-of date.
 - PDF report (`/api/company/{code}/report.pdf`, `RPT`, button in DES). 231 tests.
+- Header buttons for Screener, Calculator, Watchlist (red badge = live alerts), Portfolio, Calendar, Compare, Report and a "More" menu of every function; narrower screens fold the extra ones into More.
+- Company header: ☆ Watch / ★ Watching toggle and 🔔 Alert (price above or below a level, checked against the latest close) beside PDF report and Compare. Price alerts are kept in this browser and listed in WL.
