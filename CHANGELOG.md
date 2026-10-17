@@ -223,3 +223,11 @@ No LLM budget, so the M6 gaps are filled from what the exchange already files in
   `.venv\Scripts\python.exe docs\guide\build_guide.py`.
 - `INSTALL_TRIKAL.bat` (one-time setup on another computer) and `PACK_FOR_FRIEND.bat` (program zip + database + instructions, never `.env`).
 - `build-calls` reads in batches and releases the database between them, so the terminal keeps answering while transcripts are read.
+
+## Calculator, compare, screener, watchlist, portfolio, calendar, report (2026-10-17)
+- `CALC` return calculator (splits and bonuses count as shares; dividends ignored, cash or reinvested; CAGR, worst fall, events), API `/api/company/{code}/returns`.
+- `/compare` full-page comparison of 2-3 companies (`CMP A B C`): rebased chart, numbers, KASAUTI, ownership, statements side by side.
+- `SCRN` screener: a small safe condition language over the KASAUTI panel (three-valued logic: missing data never matches), saved screens, `/api/screen`.
+- `WL` watchlist with alerts (results, score moves, price moves, 52-week extremes, ex-dates, board meetings), `PORT` portfolio valuation; both kept in the browser, `/api/watch`, `/api/portfolio`.
+- `CAL` calendar from the exchange's board-meeting intimations (`trikal fetch-calendar`), shown as announced at the as-of date.
+- PDF report (`/api/company/{code}/report.pdf`, `RPT`, button in DES). 231 tests.

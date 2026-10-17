@@ -45,6 +45,7 @@ function Chart({ series, log, from }: { series: { code: string; t: string[]; c: 
   return <div ref={el} className="cmp-chart" />;
 }
 
+const fyOf = (d?: Financials) => { const ps = d?.periods ?? []; return ps.filter((p) => p.slice(5, 7) === (ps[0] ?? "").slice(5, 7)); };   // one year-end only
 const years = (n: number) => { const d = new Date(`${todayIST()}T00:00:00Z`); d.setUTCFullYear(d.getUTCFullYear() - n); return d.toISOString().slice(0, 10); };
 
 export default function Compare() {
@@ -147,7 +148,7 @@ export default function Compare() {
               <table className="cmp-table cmp-fin">
                 <thead>
                   <tr><th rowSpan={2}>Line item</th>{codes.map((c, i) => <th key={c} colSpan={YEARS} style={{ color: COLORS[i] }}>{c}</th>)}</tr>
-                  <tr>{codes.map((c) => ((fin[codes.indexOf(c)].data?.periods ?? []).slice(0, YEARS).reverse()).map((p) => <th key={c + p}>FY{p.slice(2, 4)}</th>))}</tr>
+                  <tr>{codes.map((c) => (fyOf(fin[codes.indexOf(c)].data).slice(0, YEARS).reverse()).map((p) => <th key={c + p}>FY{p.slice(2, 4)}</th>))}</tr>
                 </thead>
                 <tbody>
                   {lines.map((li) => (
@@ -155,7 +156,7 @@ export default function Compare() {
                       {codes.map((c, i) => {
                         const d = fin[i].data;
                         const row = d?.rows.find((r) => r.line_item === li);
-                        return (d?.periods ?? []).slice(0, YEARS).reverse().map((p) => {
+                        return fyOf(d).slice(0, YEARS).reverse().map((p) => {
                           const v = row?.cells[p]?.value;
                           return <td key={c + p} className="mono">{v === undefined ? <span className="v-muted">·</span> : li.startsWith("eps") || li === "face_value" ? v.toFixed(2) : (v / 1e7).toLocaleString("en-IN", { maximumFractionDigits: 0 })}</td>;
                         });

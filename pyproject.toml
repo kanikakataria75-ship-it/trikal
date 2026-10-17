@@ -19,6 +19,7 @@ dependencies = [
     "fastapi>=0.115",  # M3 read API
     "uvicorn>=0.30",
     "numpy>=1.26",  # sector sensitivities (OLS)
+    "reportlab>=4",  # the one-company PDF report
 ]
 
 [project.optional-dependencies]

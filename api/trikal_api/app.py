@@ -14,6 +14,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+import re
 import threading
 import time
 from contextlib import contextmanager
@@ -463,6 +464,177 @@ def segments(code: str, as_of: str = AS_OF, exchange: str = "NSE", period: str =
         return ok({"security_id": sid, "period": period, **d,
                    "note": "segment disclosures from the exchange's XBRL results; labels are the company's own; revenue is external revenue, "
                            "result is profit before tax and finance cost; available from about FY2019 (Ind AS XBRL)"}, a)
+
+
+_SCREEN_CACHE: dict[tuple, tuple[float, dict]] = {}
+PILLARS = ("quality", "growth", "valuation", "balance", "ownership", "momentum")
+TEXT_FIELDS = {"code": "NSE symbol", "name": "company name", "sector": "sector label", "playbook": "sector playbook", "peer_group": "peer group used for the percentiles"}
+NUM_FIELDS = {"score": "KASAUTI score 0-100", "confidence": "KASAUTI data confidence 0-1",
+              **{p: f"{p} pillar score 0-100" for p in PILLARS}}
+
+
+def _screen_rows(r: PitReader, a: AsOf) -> tuple[dt.date, list[dict]]:
+    days = [d for d in r.kasauti_dates(1) if d <= a.date_ist]
+    if not days:
+        raise HTTPException(409, "the screener needs KASAUTI scores (quarterly from 2023); none exist on or before this date")
+    day = days[-1]
+    hit = _SCREEN_CACHE.get(("rows", day))
+    if hit and time.time() - hit[0] < 900:
+        return day, hit[1]["rows"]
+    end = AsOf.end_of(day)
+    syms = {m[0]: m[1] for m in r.index_members("NIFTY500", end)}
+    rows = []
+    for s in r.kasauti_scores(1, day):
+        if s["score"] is None or not s["detail"]:
+            continue
+        sid, det = s["security_id"], s["detail"]
+        prof = r.profile(sid, end)
+        row = {"security_id": sid, "code": syms.get(sid), "name": prof["name"], "sector": prof["sector"], "playbook": s["playbook"],
+               "peer_group": s["peer_group"], "score": s["score"], "confidence": s["confidence"]}
+        for pname, pil in det["pillars"].items():
+            row[pname] = None if pil["score"] is None else pil["score"] * 100
+            for m, v in pil["metrics"].items():
+                row[m] = v["value"]
+                row[f"p_{m}"] = None if v["percentile"] is None else v["percentile"] * 100
+        rows.append(row)
+    _SCREEN_CACHE[("rows", day)] = (time.time(), {"rows": rows})
+    return day, rows
+
+
+@app.get("/api/screen/fields")
+def screen_fields(as_of: str = AS_OF):
+    a = asof(as_of)
+    with DB.reader_ctx() as r:
+        day, rows = _screen_rows(r, a)
+        metric = sorted({k for row in rows for k in row if k not in TEXT_FIELDS and k not in NUM_FIELDS and k != "security_id" and not k.startswith("p_")})
+        return ok({"scoring_date": day, "universe": len(rows), "text": TEXT_FIELDS, "numbers": NUM_FIELDS, "metrics": metric,
+                   "note": "metrics are ratios (roce 0.2 = 20%): write 20% and it is divided by 100; p_<metric> is the percentile among sector peers (0-100)"}, a)
+
+
+@app.get("/api/screen")
+def screen(q: str = "", as_of: str = AS_OF, sort: str = "score", desc: bool = True, limit: int = 100):
+    """Companies (Nifty 500 members at the scoring date) matching a condition such as `roce > 20% and pe < 25 and score > 60`."""
+    from trikal_analytics import screener as SC
+
+    a = asof(as_of)
+    with DB.reader_ctx() as r:
+        day, rows = _screen_rows(r, a)
+        fields = {k for row in rows for k in row if k != "security_id"}
+        try:
+            hits = SC.run(q, rows, fields)
+        except SC.ScreenError as e:
+            raise HTTPException(422, str(e)) from e
+        key = sort.lower() if sort.lower() in fields else "score"
+        hits.sort(key=lambda x: (x.get(key) is None, -(x.get(key) or 0) if desc and not isinstance(x.get(key), str) else (x.get(key) or 0)))
+        used = [f for f in sorted(fields, key=len, reverse=True) if re.search(rf"(?<![a-z0-9_]){re.escape(f)}(?![a-z0-9_])", q.lower())][:6] if q else []
+        out = [{k: row.get(k) for k in ("security_id", "code", "name", "sector", "playbook", "score", "confidence", *PILLARS, *used)} for row in hits[:max(1, min(limit, 500))]]
+        return ok({"scoring_date": day, "universe": len(rows), "matched": len(hits), "shown": len(out), "columns": used, "rows": out,
+                   "note": "a ranking among sector peers from KASAUTI v1, not a recommendation; a company missing a field never matches a condition on it"}, a)
+
+
+@app.get("/api/watch")
+def watch(codes: str, as_of: str = AS_OF, since: dt.date | None = None):
+    """A watchlist: price, 52-week position, KASAUTI score, last results, and the alerts since the date the browser last looked."""
+    from trikal_api import portfolio as PF
+
+    a = asof(as_of)
+    items, alerts = [], []
+    with DB.reader_ctx() as r:
+        for code in [c.strip().upper() for c in codes.split(",") if c.strip()][:60]:
+            sid = r.resolve(code, a, "NSE")
+            if not sid:
+                items.append({"code": code, "error": "not listed on NSE as of this date"})
+                continue
+            snap = PF.snapshot(r, sid, a, code)
+            items.append(snap)
+            alerts += PF.alerts_for(snap, since)
+        return ok({"items": items, "alerts": alerts, "note": "alerts compare with the date you last opened the list; prices are end-of-day closes known at the as-of"}, a)
+
+
+@app.get("/api/portfolio")
+def portfolio(holdings: str, as_of: str = AS_OF):
+    """Value a list of holdings (CODE:quantity[:average price]) at the as-of date: P&L, weights, sector mix, KASAUTI score of the book."""
+    from trikal_api import portfolio as PF
+
+    a = asof(as_of)
+    try:
+        hs = PF.parse_holdings(holdings)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    if len(hs) > 80:
+        raise HTTPException(422, "at most 80 holdings")
+    rows = []
+    with DB.reader_ctx() as r:
+        for h in hs:
+            sid = r.resolve(h["code"], a, "NSE")
+            if not sid:
+                rows.append({"code": h["code"], "qty": h["qty"], "error": "not listed on NSE as of this date"})
+                continue
+            sn = PF.snapshot(r, sid, a, h["code"])
+            px = sn["price"]
+            value = px * h["qty"] if px else None
+            cost = h["avg"] * h["qty"] if h["avg"] else None
+            day = (value - value / (1 + sn["change_1d"])) if value and sn["change_1d"] is not None else None
+            rows.append({**sn, "qty": h["qty"], "avg": h["avg"], "value": value, "cost": cost, "pnl": (value - cost) if value is not None and cost else None,
+                         "pnl_pct": (value / cost - 1) if value is not None and cost else None, "day_pnl": day})
+        return ok({"holdings": rows, "totals": PF.valuation([x for x in rows if "error" not in x]),
+                   "note": "end-of-day closes known at the as-of; quantity and prices as in your demat account; no tax or charges; a research view, not advice"}, a)
+
+
+@app.get("/api/calendar")
+def calendar(as_of: str = AS_OF, days: int = 30, scope: str = "all", codes: str = ""):
+    """Board meetings (results, dividends, fund raising) announced by the as-of date for the next `days` days, with the ex-dates already announced.
+    scope: all | nifty500 | list (then `codes` is the watchlist or portfolio)."""
+    a = asof(as_of)
+    days = max(1, min(days, 120))
+    start, end = a.date_ist, a.date_ist + dt.timedelta(days=days)
+    with DB.reader_ctx() as r:
+        syms = [c.strip().upper() for c in codes.split(",") if c.strip()] if scope == "list" else None
+        if scope == "list" and not syms:
+            return ok({"from": start, "to": end, "events": [], "note": "no symbols given"}, a)
+        meetings = r.board_meetings(a, start, end, syms)
+        if scope == "nifty500":
+            members = {m[1] for m in r.index_members("NIFTY500", a)}
+            meetings = [m for m in meetings if m["symbol"] in members]
+        events = []
+        for m in meetings:
+            p = m["purpose"].lower()
+            kind = "results" if "result" in p else "dividend" if "dividend" in p else "fundraise" if any(w in p for w in ("fund", "bonus", "split", "rights", "buyback", "allot")) else "other"
+            events.append({"date": m["date"], "code": m["symbol"], "kind": kind, "purpose": m["purpose"], "detail": m["detail"], "announced_at": m["announced_at"]})
+        return ok({"from": start, "to": end, "events": events, "universe": scope,
+                   "note": "board-meeting intimations as received by the exchange; dates can still move. Each shows when it was announced."}, a)
+
+
+@app.get("/api/company/{code}/report.pdf")
+def report_pdf(code: str, as_of: str = AS_OF, exchange: str = "NSE"):
+    """A one-company PDF report as of a date: headline numbers, KASAUTI, statements, segments, ownership, earnings-call statements."""
+    from fastapi.responses import Response
+
+    try:
+        from trikal_api import report as RP
+        import reportlab  # noqa: F401
+    except ImportError as e:
+        raise HTTPException(501, "PDF reports need the reportlab package: run INSTALL_TRIKAL.bat again, or python -m pip install reportlab") from e
+
+    def body(fn, *a, **k):
+        try:
+            return json.loads(fn(*a, **k).body)
+        except HTTPException:
+            return None
+
+    a = asof(as_of)
+    c = body(company, code, as_of, exchange)
+    if c is None:
+        raise HTTPException(404, f"{code} is not listed on {exchange} as of {a.date_ist}")
+    data = {"name": c["name"], "code": c["code"], "sector": c.get("sector"), "playbook": (c.get("playbook") or {}).get("label") or (c.get("playbook") or {}).get("id"),
+            "as_of_label": f"{a.date_ist:%d %b %Y}" + (" (today)" if as_of.upper() == "NOW" else ""), "metrics": c.get("metrics", {}),
+            "price": (c.get("last_price") or {}).get("close"), "price_date": (c.get("last_price") or {}).get("date"),
+            "financials": body(financials, code, as_of, exchange, "FY", "auto"), "ownership": body(ownership, code, as_of, exchange),
+            "segments": body(segments, code, as_of, exchange, "FY"), "concalls": body(concalls, code, as_of, exchange)}
+    k = body(kasauti_score, code, as_of, exchange)
+    data["kasauti"] = k if k and k.get("available") else k
+    pdf = RP.build(data)
+    return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'inline; filename="TRIKAL_{c["code"]}_{a.date_ist}.pdf"'})
 
 
 KASAUTI_VERSION = 1

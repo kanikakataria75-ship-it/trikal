@@ -1007,3 +1007,36 @@ def _dividends(self: PitReader, security_id: str, as_of: AsOf, start: dt.date, e
 
 
 PitReader.dividends = _dividends  # type: ignore[attr-defined]
+
+
+def _upcoming_actions(self: PitReader, security_id: str, as_of: AsOf, days: int = 14) -> list[dict]:
+    """Corporate actions (dividend, split, bonus, rights, buyback) already announced at as_of that go ex within the next `days` days."""
+    d = as_of.date_ist
+    rows = self.con.execute(
+        """SELECT DISTINCT a.ex_date, a.kind, a.subject FROM corp_action a
+           JOIN listing l ON l.exchange = a.exchange AND l.code = a.code AND a.ex_date BETWEEN l.valid_from AND l.valid_to
+           WHERE l.security_id = ? AND a.exchange = 'NSE' AND a.ex_date > ? AND a.ex_date <= ? AND a.known_at <= ?
+             AND a.kind IN ('dividend', 'split', 'bonus', 'rights', 'buyback', 'bonus+dividend', 'split+dividend', 'split+bonus')
+           ORDER BY a.ex_date""", [security_id, d, d + dt.timedelta(days=days), as_of.ts]).fetchall()
+    return [{"ex_date": e, "kind": k, "subject": s} for e, k, s in rows]
+
+
+PitReader.upcoming_actions = _upcoming_actions  # type: ignore[attr-defined]
+
+
+def _board_meetings(self: PitReader, as_of: AsOf, start: dt.date, end: dt.date, symbols: list[str] | None = None) -> list[dict]:
+    """Board meetings announced by as_of (the exchange had received the intimation) that fall between start and end."""
+    q = """SELECT symbol, security_id, meeting_date, purpose, detail, announced_at FROM board_meeting
+           WHERE announced_at <= ? AND meeting_date BETWEEN ? AND ?"""
+    args: list = [as_of.ts, start, end]
+    if symbols:
+        q += f" AND symbol IN ({','.join('?' * len(symbols))})"
+        args += symbols
+    try:
+        rows = self.con.execute(q + " ORDER BY meeting_date, symbol", args).fetchall()
+    except Exception:                                    # a database created before the calendar existed
+        return []
+    return [{"symbol": a, "security_id": b, "date": c, "purpose": d, "detail": e, "announced_at": f} for a, b, c, d, e, f in rows]
+
+
+PitReader.board_meetings = _board_meetings  # type: ignore[attr-defined]

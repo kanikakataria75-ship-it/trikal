@@ -483,6 +483,20 @@ def build_calls_cmd(limit: int = typer.Option(0, help="read at most this many tr
         time.sleep(pause)
 
 
+@app.command("fetch-calendar")
+def fetch_calendar_cmd() -> None:
+    """Fetch the exchange's board-meeting intimations (past 45 days to next 90) and rebuild the calendar table. Stop the API first."""
+    from trikal_core.db import init_schema
+    from trikal_pipeline import board_calendar as BC
+
+    raw, fetcher = RawStore(), Fetcher()
+    typer.echo(f"fetch: {BC.fetch(raw, fetcher)}")
+    fetcher.close()
+    con = _connect_wait()
+    init_schema(con)
+    typer.echo(f"load: {BC.load(con, raw)}")
+
+
 @app.command("relabel-dims")
 def relabel_dims_cmd() -> None:
     """One-off after the parser started naming segment / other-expense members: re-read the filings that have them,

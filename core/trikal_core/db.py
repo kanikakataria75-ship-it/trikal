@@ -217,6 +217,13 @@ CREATE TABLE IF NOT EXISTS concall_promise (
     metric VARCHAR, op VARCHAR, low DOUBLE, high DOUBLE, horizon_end DATE, horizon_kind VARCHAR, quote VARCHAR, page INTEGER
 );
 
+-- Board meetings the companies announced to the exchange (results, dividends, fund raising ...): the calendar. announced_at is when the
+-- exchange received the intimation, so a calendar viewed at an as-of date shows only meetings already announced by then.
+CREATE TABLE IF NOT EXISTS board_meeting (
+    symbol VARCHAR, security_id VARCHAR, meeting_date DATE, purpose VARCHAR, detail VARCHAR,
+    announced_at TIMESTAMPTZ, source_sha VARCHAR, recorded_at TIMESTAMPTZ
+);
+
 -- KASAUTI scores, one row per (score version, scoring date, security). Derived data: reproducible from the PIT inputs, kept so that
 -- the report card and the live record are fixed once written. `detail` is the JSON breakdown (pillars, metrics, percentiles, drivers).
 CREATE TABLE IF NOT EXISTS kasauti_score (

@@ -10,6 +10,10 @@ export const FUNCTIONS: Record<FnCode, { label: string; desc: string }> = {
   RV: { label: "Relative value", desc: "Peers in the same sector and playbook, same as-of" },
   WC: { label: "What changed", desc: "Metric moves and events in the last quarter" },
   OWN: { label: "Ownership", desc: "Promoter, institutions, public; pledge" },
+  CAL: { label: "Calendar", desc: "Upcoming board meetings: results, dividends, fund raising; each with when it was announced" },
+  WL: { label: "Watchlist", desc: "Your watched companies with alerts: new results, score moves, big price moves, ex-dates (kept in this browser)" },
+  PORT: { label: "Portfolio", desc: "Value your holdings: P&L, weights, sector mix, KASAUTI score of the book (kept in this browser)" },
+  SCRN: { label: "Screener", desc: "Find companies by a condition (roce > 20% and pe < 25 ...) over the KASAUTI panel, as of any scoring date" },
   CALC: { label: "Return calculator", desc: "If you had put an amount in on a date: what it became, counting splits, bonuses and (optionally) dividends" },
   CALL: { label: "Concalls", desc: "What management said it would do, judged against its own later results; tone drift across calls (rule-based, quotes shown)" },
   KAS: { label: "KASAUTI", desc: "Sector-relative score with pillars, drivers, what was left out, and the report card that audits it" },
@@ -25,7 +29,7 @@ export const FUNCTIONS: Record<FnCode, { label: string; desc: string }> = {
 
 export const LATER: Record<string, string> = {
   SEC: "M4/M5 sector desk", POL: "M5",
-  NOTE: "M8", RPT: "M8", FRX: "M9 forensics", CAL: "M9", SCRN: "M9 screener",
+  NOTE: "M8", FRX: "M9 forensics",
 };
 
 export type Parsed =
@@ -34,6 +38,7 @@ export type Parsed =
   | { kind: "entity"; code: string; fn: FnCode }
   | { kind: "later"; word: string; milestone: string }
   | { kind: "compare"; codes: string[] }
+  | { kind: "report" }
   | { kind: "mode"; mode: "cinema" | "pro" }
   | { kind: "shock"; text: string }
   | { kind: "help" }
@@ -72,6 +77,7 @@ export function parse(input: string, today: string): Parsed {
     const text = input.trim().replace(/^shocks*/i, "");
     return text ? { kind: "shock", text } : { kind: "bad", why: "SHOCK CRUDE +20 · SHOCK INR 90 · SHOCK REPO +50bp · combine with &" };
   }
+  if (t[0] === "RPT" || t[0] === "REPORT") return { kind: "report" };
   if (t[0] === "CMP" || t[0] === "COMPARE") {
     const codes = t.slice(1, 4);
     return codes.length >= 2 ? { kind: "compare", codes } : { kind: "bad", why: "CMP needs two or three symbols: CMP TCS INFY WIPRO" };
@@ -85,7 +91,7 @@ export function parse(input: string, today: string): Parsed {
   const fn = (t[1] ?? "DES") as FnCode;
   if (t[1] && !(t[1] in FUNCTIONS)) {
     if (t[1] in LATER) return { kind: "later", word: t[1], milestone: LATER[t[1]] };
-    return { kind: "bad", why: `Unknown function “${t[1]}”. Try DES, GP, FA, DUP, CR, RV, WC, OWN, SEG, KAS, CALL, CALC, DCF, EVT.` };
+    return { kind: "bad", why: `Unknown function “${t[1]}”. Try DES, GP, FA, DUP, CR, RV, WC, OWN, SEG, KAS, CALL, CALC, SCRN, WL, PORT, CAL, DCF, EVT.` };
   }
   return { kind: "entity", code: t[0], fn };
 }

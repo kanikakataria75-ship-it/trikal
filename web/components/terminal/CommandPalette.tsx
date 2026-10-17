@@ -36,6 +36,7 @@ export default function CommandPalette() {
     else if (q.kind === "mode") { setMode(q.mode); say(q.mode === "pro" ? "PRO mode: flat, dense, keyboard-first" : "CINEMA mode: the 3D experience", "info"); }
     else if (q.kind === "shock") { setShock(q.text); workspace.open("TX"); }
     else if (q.kind === "help") workspace.open("HELP");
+    else if (q.kind === "report") { window.open(`/api/company/${encodeURIComponent(code ?? "")}/report.pdf?as_of=${encodeURIComponent(asOf)}`, "_blank"); }
     else if (q.kind === "compare") { window.location.href = `/compare?codes=${q.codes.join(",")}${asOf !== "NOW" ? `&asof=${asOf}` : ""}`; return; }
     else if (q.kind === "later") say(`${q.word} arrives with ${q.milestone}`, "warn");
     else if (q.kind === "bad") { say(q.why, "warn"); return; }
