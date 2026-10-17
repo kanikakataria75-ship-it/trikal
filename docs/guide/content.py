@@ -288,6 +288,7 @@ sec("8 · Command reference", "Every trikal command, when to use it, and the ord
         ["show CODE --as-of DATE", "Print a security as the terminal would have seen it on a date.", ""],
         ["raw-status", "Summarise the raw-zone fetch log.", ""],
     ], [0.3, 0.62, 0.08], True),
+    ("warn", "Never share .env", "It holds your broker PIN and TOTP secret, which can log in to your brokerage account. A friend does not need it: the terminal runs without it (live prices off). They can add their own keys later."),
     ("h2", "Dependencies, in one picture"),
     ("code", ["prices  ->  security master + adjustments  ->  index membership",
               "filings (fetch-m2) -> refresh-m2 -> financials, ownership, segments, classification",
@@ -297,6 +298,8 @@ sec("8 · Command reference", "Every trikal command, when to use it, and the ord
     ("h2", "Launchers"),
     ("table", ["File", "Use"], [
         ["TRIKAL.bat / STOP_TRIKAL.bat", "Start / stop the terminal and data server."],
+        ["PACK_FOR_FRIEND.bat", "Makes a TRIKAL_for_friend folder beside the project: program zip (2 MB), the database and instructions. Never includes .env, your broker keys or raw downloads."],
+        ["INSTALL_TRIKAL.bat", "Run once on the other laptop: installs Python and Node if missing (winget), the Python and web packages, creates .env from the template. Then TRIKAL.bat."],
         ["run_m2_overnight.cmd", "Resumable filing download (hidden window); relaunch if the laptop slept."],
         ["run_update_prices.cmd, run_update_daily.cmd", "Prices only, and prices plus parsing."],
         ["run_fetch_decks.cmd, run_build_reported.cmd", "Presentations download and parse."],

@@ -457,14 +457,30 @@ def fetch_calls_cmd(symbols: str = typer.Option("", help="comma-separated NSE sy
 
 
 @app.command("build-calls")
-def build_calls_cmd(limit: int = typer.Option(0, help="read at most this many transcripts (0 = all)")) -> None:
-    """Read downloaded transcripts into concall / concall_promise. Stop the API first."""
+def build_calls_cmd(limit: int = typer.Option(0, help="read at most this many transcripts (0 = all)"),
+                    batch: int = typer.Option(15, help="transcripts per batch: the database is released between batches so the terminal keeps working"),
+                    pause: int = typer.Option(8, help="seconds the database stays free between batches")) -> None:
+    """Read downloaded transcripts into concall / concall_promise, a batch at a time (the terminal can read in between)."""
+    import time
+
     from trikal_core.db import init_schema
     from trikal_pipeline.load_calls import build_calls
 
-    con = _connect_wait()
-    init_schema(con)
-    typer.echo(build_calls(con, RawStore(), limit=limit or None, log=typer.echo))
+    raw, total, left = RawStore(), 0, limit or None
+    while True:
+        con = _connect_wait()
+        init_schema(con)
+        n = batch if left is None else min(batch, left)
+        st = build_calls(con, raw, limit=n, log=lambda *_: None)
+        con.close()
+        done = st["calls"] + st["no_period"] + st["errors"]
+        total += done
+        typer.echo(f"{total} transcripts read ({st})")
+        if left is not None:
+            left -= done
+        if done == 0 or (left is not None and left <= 0):
+            break
+        time.sleep(pause)
 
 
 @app.command("relabel-dims")

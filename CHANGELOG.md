@@ -221,3 +221,5 @@ No LLM budget, so the M6 gaps are filled from what the exchange already files in
 - Command bar: KAS, CC/CONCALL, KASAUTI and SEGMENTS resolve to their panels (KAS used to answer "later milestone").
 - `docs/guide/TRIKAL_KASAUTI_Field_Guide.pdf`: the full guide (how to run, read, trust and extend; all commands; audit; roadmap). Rebuild with
   `.venv\Scripts\python.exe docs\guide\build_guide.py`.
+- `INSTALL_TRIKAL.bat` (one-time setup on another computer) and `PACK_FOR_FRIEND.bat` (program zip + database + instructions, never `.env`).
+- `build-calls` reads in batches and releases the database between them, so the terminal keeps answering while transcripts are read.
