@@ -242,5 +242,6 @@ No LLM budget, so the M6 gaps are filled from what the exchange already files in
 
 ## KASAUTI v2 (2026-10-18)
 - `config/scores/kasauti_v2.yaml`: adds `earnings_quality` (cash flow / profit, accruals / assets, other income / PBT; non-financials) and `credibility` (share of judged management statements kept, shrunk toward 50%, ranked among all companies); v1 stays frozen. New metrics `cfo_to_profit`, `accruals_ratio`, `other_income_share` (forbidden for financials).
-- Report card: slightly better than v1 at every horizon but inside the noise (docs/reports/kasauti_v2.md); credibility is scored for 56 companies on 30-Sep-2026 and none before 2025. Not frozen.
+- Report card: slightly better than v1 at every horizon but inside the noise (docs/reports/kasauti_v2.md); credibility is scored for 50 companies on 30-Sep-2026 and none before 2025. Not frozen.
 - API: `version` parameter on the KASAUTI, report, history, heatmap and screener endpoints (default 1); KAS panel and HEAT have a v1/v2 toggle. Concall transcripts: 3,415 calls, 455 companies, 2,985 statements. 238 tests.
+- Promise Tracker: segment and share statements and ROE/ROCE targets are not judged; exceeding an 'about' figure is delivered; a sector-forbidden metric is not judged instead of an error. Year inference for unnamed years was tried and rejected.

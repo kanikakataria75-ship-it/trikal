@@ -149,3 +149,35 @@ def test_constant_currency_and_unspecified_margins_are_listed_but_never_judged(c
     for m in ("revenue_growth_cc", "margin_generic"):
         j = PR.judge(eng, sid, {**base, "metric": m}, AsOf.end_of(D(2026, 8, 1)))
         assert j["verdict"] == "not judged" and j["why"]
+
+
+def test_a_statement_with_no_year_named_is_never_judged_and_a_forbidden_metric_is_not_an_error(con):
+    sid = seeded(con)
+    eng = M.Engine(PitReader(con))
+    p = {"metric": "revenue_growth", "op": "range", "low": 8.0, "high": 12.0, "horizon_end": None, "horizon_kind": "none", "call_period_end": D(2025, 12, 31),
+         "quote": "We expect revenue growth of 8% to 12%."}
+    j = PR.judge(eng, sid, p, AsOf.end_of(D(2026, 8, 1)))
+    assert j["verdict"] == "not judged" and "no single financial year" in j["why"]
+
+    class Bank:
+        def resolution(self, *a):
+            return eng.resolution(*a)
+
+        def compute(self, *a):
+            from trikal_analytics.result import ForbiddenMetric
+            raise ForbiddenMetric("ebitda_margin", "banks", "forbidden.metrics", "no EBITDA for a bank")
+
+    f = PR.judge(Bank(), sid, {**p, "metric": "ebitda_margin", "horizon_kind": "fy", "horizon_end": FY26}, AsOf.end_of(D(2026, 8, 1)))
+    assert f["verdict"] == "not judged" and "not defined" in f["why"]
+
+
+def test_statements_about_a_segment_or_a_share_and_return_targets_are_listed_but_not_judged(con):
+    sid = seeded(con)
+    eng = M.Engine(PitReader(con))
+    base = {"metric": "revenue_growth", "op": "range", "low": 8.0, "high": 12.0, "horizon_end": FY26, "horizon_kind": "fy"}
+    late = AsOf.end_of(D(2026, 8, 1))
+    assert PR.judge(eng, sid, {**base, "quote": "We expect revenue growth of 8% to 12% in our US business."}, late)["verdict"] == "not judged"
+    assert PR.judge(eng, sid, {**base, "quote": "Our verticals accounted for approximately 80% of FY25 revenue."}, late)["verdict"] == "not judged"
+    assert PR.judge(eng, sid, {**base, "quote": "We expect revenue growth of 8% to 12% for the company."}, late)["verdict"] == "delivered"
+    assert PR.judge(eng, sid, {**base, "metric": "return_ratio", "quote": "ROE 16% to 17%, NIM 3.65% to 3.70%"}, late)["verdict"] == "not judged"
+    assert PR.verdict_for("about", 15, 15, 41.0) == "delivered" and PR.verdict_for("about", 15, 15, 5.0) == "missed"    # beating a figure is not a broken promise
