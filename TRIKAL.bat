@@ -7,7 +7,19 @@ echo   TRIKAL - starting the terminal. Keep this window open until the browser o
 echo.
 
 if not exist ".venv\Scripts\python.exe" (
-  echo   The Python environment is missing: .venv\Scripts\python.exe
+  echo   The Python environment is missing. Double-click INSTALL_TRIKAL.bat first ^(once on this computer^).
+  pause
+  exit /b 1
+)
+".venv\Scripts\python.exe" -c "import trikal_core, trikal_analytics, trikal_kasauti" >nul 2>nul
+if errorlevel 1 (
+  echo   The Python environment does not work on this computer ^(it was copied from another one^).
+  echo   Double-click INSTALL_TRIKAL.bat first ^(once^); it rebuilds it. Your data folder is not touched.
+  pause
+  exit /b 1
+)
+if not exist "web\node_modules" (
+  echo   The terminal packages are missing. Double-click INSTALL_TRIKAL.bat first ^(once^).
   pause
   exit /b 1
 )

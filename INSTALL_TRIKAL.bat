@@ -37,6 +37,14 @@ if errorlevel 1 (
 for /f "delims=" %%v in ('node --version') do echo   Node: %%v
 
 rem ---- Python environment ------------------------------------------------------------------------------
+rem a .venv copied from another computer points at that computer's folders and Python: if it does not run here, build a fresh one
+if exist ".venv\Scripts\python.exe" (
+  ".venv\Scripts\python.exe" -c "import sys" >nul 2>nul
+  if errorlevel 1 (
+    echo   the Python environment copied from the other computer does not work here; rebuilding it ...
+    rmdir /s /q .venv
+  )
+)
 if not exist ".venv\Scripts\python.exe" (
   echo   creating the Python environment ...
   %PY% -m venv .venv || goto :fail
